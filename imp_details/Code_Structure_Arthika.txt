@@ -1,0 +1,312 @@
+MODULAR MONOLITH ARCHITECTURE (MICROSERVICE-READY)
+
+OVERVIEW:
+The system follows a Modular Monolith architecture using the MERN stack.
+It remains a single deployable application but is internally structured as independent domain modules.
+
+Key Principles:
+
+* Domain-driven modularization
+* Separation of concerns
+* Event-driven internal communication
+* Microservice-ready boundaries
+
+---
+
+1. HIGH-LEVEL ARCHITECTURE
+
+---
+
+Frontend (React SPA)
+|
+v
+Backend (Express Modular Monolith)
+|
+v
+-
+
+| Auth | Users | Groups | Expenses | Funds |
+| Settlements | Analytics | Notifications |
+-------------------------------------------
+
+```
+    |
+    v
+```
+
+MongoDB (Domain-based collections)
+|
+v
+Socket.io (Real-time communication)
+
+---
+
+2. ROOT PROJECT STRUCTURE
+
+---
+
+arthika/
+|
+|-- client/                      # React frontend
+|-- server/                      # Backend (modular monolith)
+|
+|-- shared/                      # Optional shared utilities
+|-- docs/                        # SRS, architecture docs
+|-- scripts/                     # Automation scripts
+|-- .env.example
+|-- docker-compose.yml
+|-- README.md
+
+---
+
+3. FRONTEND STRUCTURE (FEATURE-BASED)
+
+---
+
+client/
+|
+|-- src/
+|   |
+|   |-- app/                    # App configuration
+|   |   |-- routes.jsx
+|   |   |-- store.js
+|   |
+|   |-- features/               # Domain-based modules
+|   |   |-- auth/
+|   |   |-- groups/
+|   |   |-- expenses/
+|   |   |-- funds/
+|   |   |-- settlements/
+|   |   |-- analytics/
+|   |   |-- notifications/
+|   |
+|   |-- components/             # Shared UI components
+|   |   |-- ui/
+|   |   |-- layout/
+|   |
+|   |-- services/               # API layer
+|   |-- hooks/                  # Custom hooks
+|   |-- utils/                  # Helper functions
+|   |-- constants/
+|   |-- assets/
+|   |
+|   |-- App.jsx
+|   |-- main.jsx
+
+FEATURE MODULE STRUCTURE (EXAMPLE: EXPENSES)
+
+features/expenses/
+|
+|-- components/                 # UI components
+|-- pages/                      # Screens
+|-- api/                        # API calls
+|-- hooks/                      # Custom hooks
+|-- utils/                      # Business helpers (split logic)
+|-- store/                      # Local state (optional)
+|-- index.js                    # Public exports
+
+---
+
+4. BACKEND STRUCTURE
+
+---
+
+server/
+|
+|-- src/
+|   |
+|   |-- app.js                  # Express app configuration
+|   |-- server.js               # Entry point
+|
+|   |-- config/                 # Configuration layer
+|   |   |-- db.js
+|   |   |-- env.js
+|   |   |-- socket.js
+|
+|   |-- modules/                # Domain modules
+|   |   |-- auth/
+|   |   |-- users/
+|   |   |-- groups/
+|   |   |-- expenses/
+|   |   |-- funds/
+|   |   |-- settlements/
+|   |   |-- analytics/
+|   |   |-- notifications/
+|
+|   |-- shared/                 # Shared utilities
+|   |   |-- middleware/
+|   |   |-- utils/
+|   |   |-- constants/
+|   |   |-- errors/
+|
+|   |-- infrastructure/         # External integrations
+|   |   |-- database/
+|   |   |-- socket/
+|   |   |-- storage/
+|
+|   |-- events/                 # Internal event system
+|   |   |-- eventBus.js
+|   |   |-- events.js
+|
+|   |-- routes/
+|       |-- index.js
+
+---
+
+5. MODULE STRUCTURE (EXAMPLE: EXPENSES MODULE)
+
+---
+
+modules/expenses/
+|
+|-- controllers/                # HTTP request handlers
+|   |-- expense.controller.js
+|
+|-- services/                   # Business logic
+|   |-- createExpense.js
+|   |-- splitLogic.js
+|
+|-- repositories/               # Database access layer
+|   |-- expense.repo.js
+|
+|-- models/                     # Mongoose schemas
+|   |-- expense.model.js
+|
+|-- routes/                     # Express routes
+|   |-- expense.routes.js
+|
+|-- validators/                 # Input validation
+|
+|-- events/                     # Event emitters/consumers
+|   |-- expense.events.js
+|
+|-- dto/                        # Data transfer objects
+|
+|-- index.js                    # Module export
+
+---
+
+6. INTERNAL EVENT-DRIVEN DESIGN
+
+---
+
+events/
+|
+|-- eventBus.js                 # Event dispatcher
+|-- events.js                   # Event definitions
+
+EXAMPLE FLOW:
+
+Expense Created
+-> Emit EVENT: EXPENSE_CREATED
+-> Update balances (groups module)
+-> Update analytics
+-> Trigger notifications (Socket.io)
+
+---
+
+7. DATABASE DESIGN
+
+---
+
+Collections:
+
+* users
+* groups
+* expenses
+* funds
+* settlements
+* notifications
+
+Rules:
+
+* Each module owns its schema
+* No direct cross-module DB access
+* Interactions must go through services
+
+---
+
+8. API ROUTE STRUCTURE
+
+---
+
+/api/v1/auth
+/api/v1/users
+/api/v1/groups
+/api/v1/expenses
+/api/v1/funds
+/api/v1/settlements
+/api/v1/analytics
+
+Example:
+app.use("/api/v1/expenses", expenseRoutes)
+
+---
+
+9. SOCKET ARCHITECTURE
+
+---
+
+infrastructure/socket/
+|
+|-- socketServer.js
+|-- socketHandlers/
+|   |-- expense.handler.js
+|   |-- group.handler.js
+
+---
+
+10. SHARED LAYER
+
+---
+
+shared/
+|
+|-- middleware/
+|   |-- auth.middleware.js
+|   |-- error.middleware.js
+|
+|-- utils/
+|   |-- jwt.js
+|   |-- responseFormatter.js
+|
+|-- constants/
+|-- errors/
+
+---
+
+11. DESIGN BENEFITS
+
+---
+
+* Clear domain separation
+* Microservice-ready structure
+* Scalable and maintainable codebase
+* Testable business logic
+* Event-driven architecture
+
+---
+
+12. FUTURE MIGRATION PATH
+
+---
+
+modules/expenses -> separate microservice
+modules/auth -> separate microservice
+eventBus -> Kafka or message broker
+
+No major refactoring required
+
+---
+
+13. ENGINEERING PATTERN
+
+---
+
+Incorrect:
+controller -> direct database access
+
+Correct:
+controller -> service -> repository -> database
+
+* event-driven communication
