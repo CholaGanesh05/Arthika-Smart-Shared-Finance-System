@@ -44,8 +44,20 @@ const settlementSchema = new mongoose.Schema(
       type: String, // UPI txn id (optional)
       trim: true,
     },
+
+    date: {
+      type: Date,
+      default: Date.now,
+    },
+
+    status: {
+      type: String,
+      enum: ["pending", "confirmed", "disputed"],
+      default: "pending",
+      index: true,
+    },
   },
-  { timestamps: true }
+  { timestamps: true, versionKey: false }
 );
 
 // 🔥 INDEXES (OPTIMIZED)

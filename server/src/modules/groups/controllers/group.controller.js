@@ -3,6 +3,11 @@ import {
   getUserGroups,
   addMemberToGroup,
   getGroupById,
+  removeMemberFromGroup,
+  deleteGroup,
+  joinGroupWithCode,
+  updateMemberRole,
+  archiveGroup
 } from "../services/group.service.js";
 
 
@@ -11,11 +16,11 @@ import {
 // ======================
 export const createGroupController = async (req, res) => {
   try {
-    const { name, description, members } = req.body;
+    const { name, description, avatar, members } = req.body;
     const userId = req.user._id;
 
     const group = await createGroup(
-      { name, description, members },
+      { name, description, avatar, members },
       userId
     );
 
@@ -104,4 +109,123 @@ export const addMemberController = async (req, res) => {
   res.status(400);
   throw error;
  }
+};
+
+
+// ======================
+// JOIN GROUP VIA INVITE CODE
+// ======================
+export const joinWithCodeController = async (req, res) => {
+  try {
+    const { inviteCode } = req.body;
+    const userId = req.user._id;
+
+    const group = await joinGroupWithCode(inviteCode, userId);
+
+    res.status(200).json({
+      success: true,
+      message: "Joined group successfully",
+      data: group,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// ======================
+// UPDATE MEMBER ROLE
+// ======================
+export const updateRoleController = async (req, res) => {
+  try {
+    const { groupId, userId } = req.params;
+    const { role } = req.body;
+    const currentUserId = req.user._id;
+
+    const group = await updateMemberRole(groupId, userId, role, currentUserId);
+
+    res.status(200).json({
+      success: true,
+      message: "Role updated successfully",
+      data: group,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// ======================
+// REMOVE MEMBER
+// ======================
+export const removeMemberController = async (req, res) => {
+  try {
+    const { groupId, userId } = req.params;
+    const currentUserId = req.user._id;
+
+    const group = await removeMemberFromGroup(groupId, userId, currentUserId);
+
+    res.status(200).json({
+      success: true,
+      message: "Member removed successfully",
+      data: group,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// ======================
+// ARCHIVE GROUP (FR2.7)
+// ======================
+export const archiveGroupController = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const currentUserId = req.user._id;
+
+    const result = await archiveGroup(groupId, currentUserId);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// ======================
+// DELETE GROUP
+// ======================
+export const deleteGroupController = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const currentUserId = req.user._id;
+
+    const result = await deleteGroup(groupId, currentUserId);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };

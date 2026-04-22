@@ -50,21 +50,25 @@ export const simplifyDebts = async (groupId, userId) => {
   const ledger = await Ledger.find({ group: groupId }).lean();
 
   // ======================
-  // NET BALANCE
+  // NET BALANCE (LOGIC FLAW FIX: Ghost Ledger Defense)
   // ======================
   for (const entry of ledger) {
     const from = entry.from.toString();
     const to = entry.to.toString();
 
-    net[from] = Number((net[from] - entry.amount).toFixed(2));
-    net[to] = Number((net[to] + entry.amount).toFixed(2));
+    // Defensively initialize in case of deleted members whose disputed debts resurrected
+    if (net[from] === undefined) net[from] = 0;
+    if (net[to] === undefined) net[to] = 0;
+
+    net[from] -= entry.amount;
+    net[to] += entry.amount;
   }
 
   const debtors = [];
   const creditors = [];
 
   for (const user in net) {
-    const amount = Number(net[user].toFixed(2));
+    const amount = net[user];
 
     if (amount === 0) continue;
 
@@ -87,9 +91,7 @@ export const simplifyDebts = async (groupId, userId) => {
     const d = debtors[i];
     const c = creditors[j];
 
-    const settledAmount = Number(
-      Math.min(d.amount, c.amount).toFixed(2)
-    );
+    const settledAmount = Math.min(d.amount, c.amount);
 
     settlements.push({
       from: {
@@ -103,10 +105,11 @@ export const simplifyDebts = async (groupId, userId) => {
         email: userMap[c.user]?.email || "",
       },
       amount: settledAmount,
+      amountRupees: (settledAmount / 100).toFixed(2),
     });
 
-    d.amount = Number((d.amount - settledAmount).toFixed(2));
-    c.amount = Number((c.amount - settledAmount).toFixed(2));
+    d.amount -= settledAmount;
+    c.amount -= settledAmount;
 
     if (d.amount === 0) i++;
     if (c.amount === 0) j++;
@@ -128,6 +131,7 @@ export const settleDebt = async ({
   fromUserId,
   toUserId,
   amount,
+  date,
   method = "cash",
   reference = null,
 }) => {
@@ -151,29 +155,49 @@ export const settleDebt = async ({
       throw new Error("Invalid amount");
     }
 
-    // ✅ FIX: preserve decimals (not Math.round)
-    amount = Number(Number(amount).toFixed(2));
+    // ✅ Convert input (rupees) to integer (paise)
+    const amountPaise = Math.round(amount * 100);
 
-    const debt = await Ledger.findOne({
+    // LOGIC FLAW FIX: Min-Cash-Flow Transitive Routing!
+    // If users settle based on the Simplified Plan (A pays C), the raw ledger (A->B, B->C) won't have a direct A->C debt.
+    // Instead of throwing an error, we mathematically resolve the graph by manipulating the edge or injecting a counter-cyclic edge!
+    
+    const forward = await Ledger.findOne({
       group: groupId,
       from: fromUserId,
       to: toUserId,
     }).session(session);
 
-    if (!debt) throw new Error("No debt found");
-
-    if (amount > debt.amount) {
-      throw new Error("Amount exceeds debt");
-    }
-
-    // ======================
-    // UPDATE LEDGER
-    // ======================
-    if (Number(debt.amount.toFixed(2)) === amount) {
-      await debt.deleteOne({ session });
+    if (forward) {
+      if (amountPaise > forward.amount) {
+        throw new Error(`Amount exceeds specific pairwise debt (₹${(forward.amount / 100).toFixed(2)})`);
+      }
+      if (forward.amount === amountPaise) {
+        await forward.deleteOne({ session });
+      } else {
+        forward.amount -= amountPaise;
+        await forward.save({ session });
+      }
     } else {
-      debt.amount = Number((debt.amount - amount).toFixed(2));
-      await debt.save({ session });
+      // Check reverse edge
+      const reverse = await Ledger.findOne({
+        group: groupId,
+        from: toUserId,
+        to: fromUserId,
+      }).session(session);
+
+      if (reverse) {
+        // If they already owed the payer, the payer giving them MORE money increases their debt!
+        reverse.amount += amountPaise;
+        await reverse.save({ session });
+      } else {
+        // Graph Transitive Settlement: Inject a counter-cyclic edge!
+        // A pays C. C now owes A mathematically. This brilliantly zeroes out the net matrix.
+        await Ledger.create(
+          [{ group: groupId, from: toUserId, to: fromUserId, amount: amountPaise }],
+          { session }
+        );
+      }
     }
 
     // ======================
@@ -185,7 +209,10 @@ export const settleDebt = async ({
           group: groupId,
           from: fromUserId,
           to: toUserId,
-          amount,
+          amount: amountPaise,
+          date: date || new Date(),
+          status: "pending",
+          settledBy: fromUserId,
           method,
           reference,
         },
@@ -207,10 +234,10 @@ export const settleDebt = async ({
     // ======================
     // 🔥 EVENTS
     // ======================
-    emitEvent(groupId, "group:debt:settled", {
+    emitEvent(groupId.toString(), "group:debt:settled", {
       from: fromUserId,
       to: toUserId,
-      amount,
+      amount: (amountPaise / 100).toFixed(2), // Convert mapping to rupees for Socket broadcast
     });
 
     emitEvent(groupId, "group:balance:updated");
@@ -223,6 +250,100 @@ export const settleDebt = async ({
     throw error;
   }
 };
+
+// ======================
+// REVIEW SETTLEMENT (FR6.4 - OWNER/MANAGER ONLY)
+// ======================
+export const reviewSettlement = async (settlementId, status, requesterId) => {
+  if (!mongoose.Types.ObjectId.isValid(settlementId)) throw new Error("Invalid settlement ID");
+  if (!["confirmed", "disputed"].includes(status)) throw new Error("Invalid status type");
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const settlement = await Settlement.findById(settlementId).session(session);
+    if (!settlement) throw new Error("Settlement not found");
+
+    if (settlement.status !== "pending") {
+      throw new Error(`Settlement is already marked as ${settlement.status}`);
+    }
+
+    const group = await Group.findById(settlement.group).session(session);
+    if (!group) throw new Error("Group not found");
+
+    const member = group.getMember(requesterId);
+    if (!member || !["owner", "manager"].includes(member.role)) {
+      throw new Error("Only an Owner or Manager can review a settlement");
+    }
+
+    // Update status
+    settlement.status = status;
+    await settlement.save({ session });
+
+    // ======================
+    // IF DISPUTED -> REVERSE LEDGER (FR6.4)
+    // ======================
+    // The settlement was natively a payment from `from` to `to`, thereby dynamically REDUCING debt
+    // If it's disputed, that payment didn't exist -> we must ADD the debt back.
+    if (status === "disputed") {
+      const forward = await Ledger.findOne({
+        group: settlement.group,
+        from: settlement.from,
+        to: settlement.to,
+      }).session(session);
+
+      if (forward) {
+        forward.amount += settlement.amount;
+        await forward.save({ session });
+      } else {
+        // Did the ledger get heavily netted to zero / inverted? Add explicitly back to forward debt
+        await Ledger.create(
+          [
+            {
+              group: settlement.group,
+              from: settlement.from,
+              to: settlement.to,
+              amount: settlement.amount,
+              expense: settlement._id, // tie it to settlement as an operation placeholder
+            },
+          ],
+          { session }
+        );
+      }
+    }
+
+    // ======================
+    // CACHE INVALIDATION
+    // ======================
+    try {
+      await redisClient.del(`balances:${settlement.group}`);
+      await redisClient.del(`settlements:${settlement.group}`);
+    } catch (_) {}
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // ======================
+    // 🔥 EVENTS
+    // ======================
+    emitEvent(settlement.group.toString(), "group:debt:reviewed", {
+      settlementId,
+      status,
+    });
+    
+    if (status === "disputed") {
+      emitEvent(settlement.group.toString(), "group:balance:updated");
+    }
+
+    return { message: `Settlement marked as ${status} successfully`, settlement };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
+};
+
 
 // ======================
 // GET SETTLEMENT HISTORY
@@ -243,5 +364,9 @@ export const getSettlementHistory = async (groupId, userId) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  return settlements;
+  // Map amounts to also include rupees string
+  return settlements.map((s) => ({
+    ...s,
+    amountRupees: (s.amount / 100).toFixed(2),
+  }));
 };

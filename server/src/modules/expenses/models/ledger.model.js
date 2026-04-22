@@ -55,8 +55,8 @@ ledgerSchema.pre("save", function (next) {
     return next(new Error("Cannot create ledger entry to self"));
   }
 
-  // ✅ normalize precision
-  this.amount = Number(this.amount.toFixed(2));
+  // ✅ normalize precision to integer (paise)
+  this.amount = Math.round(this.amount);
 
   next();
 });

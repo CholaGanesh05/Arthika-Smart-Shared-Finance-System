@@ -50,6 +50,11 @@ const groupSchema = new mongoose.Schema(
       maxlength: 300,
     },
 
+    avatar: {
+      type: String,
+      default: "",
+    },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -79,6 +84,17 @@ const groupSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+
+    inviteCode: {
+      type: String,
+      unique: true,
+      sparse: true,
     },
   },
   {

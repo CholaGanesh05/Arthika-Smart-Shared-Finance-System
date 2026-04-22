@@ -1,139 +1,138 @@
-import { addExpense } from "../services/expense.service.js";
+import {
+  addExpense,
+  getGroupExpenses,
+  editExpense,
+  deleteExpense,
+} from "../services/expense.service.js";
 import { getGroupBalances } from "../services/balance.service.js";
-import { simplifyDebts } from "../services/settlement.service.js";
-import { settleDebt } from "../services/settlement.service.js";
-import { getGroupExpenses } from "../services/expense.service.js";
-
 
 
 // ======================
-// ADD EXPENSE
+// FR3.1–FR3.5 — ADD EXPENSE
+// POST /expenses/:groupId
+// paidBy defaults to logged-in user but can be overridden (any group member)
 // ======================
-export const addExpenseController = async (req, res) => {
+export const addExpenseController = async (req, res, next) => {
   try {
     const { groupId } = req.params;
-    const { amount, description, splitType, splits } = req.body;
-
-    const paidBy = req.user._id; // from auth middleware
+    const {
+      title,
+      amount,
+      date,
+      description,
+      category,
+      splitType,
+      splits,
+      receiptUrl,
+      paidBy,      // FR3.1: payer can be any member; defaults to self
+    } = req.body;
 
     const expense = await addExpense({
       groupId,
-      paidBy,
+      paidBy: paidBy || req.user._id.toString(),
+      title,
       amount,
+      date,
       description,
+      category,
       splitType,
       splits,
+      receiptUrl,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Expense added successfully",
       data: expense,
     });
-
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
+
 // ======================
-// GET BALANCES
+// FR3.6 — EDIT EXPENSE (metadata only)
+// PUT /expenses/:groupId/:expenseId
 // ======================
-export const getBalancesController = async (req, res) => {
+export const editExpenseController = async (req, res, next) => {
   try {
-    const { groupId } = req.params;
-    const userId = req.user._id;
+    const { expenseId } = req.params;
+    const expense = await editExpense(expenseId, req.body, req.user._id);
 
-    const balances = await getGroupBalances(groupId, userId);
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      count: balances.length,
-      data: balances,
+      message: "Expense updated successfully",
+      data: expense,
     });
-
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
+
 // ======================
-// SIMPLIFY DEBTS
+// FR3.6 + FR3.7 — DELETE EXPENSE
+// DELETE /expenses/:groupId/:expenseId
 // ======================
-export const simplifyDebtsController = async (req, res) => {
+export const deleteExpenseController = async (req, res, next) => {
   try {
-    const { groupId } = req.params;
-    const userId = req.user._id;
+    const { expenseId } = req.params;
+    const result = await deleteExpense(expenseId, req.user._id);
 
-    const settlements = await simplifyDebts(groupId, userId);
-
-    res.status(200).json({
-      success: true,
-      count: settlements.length,
-      data: settlements,
-    });
-
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-// ======================
-// SETTLE CONTROLLER
-// ======================
-export const settleDebtController = async (req, res) => {
-  try {
-    const { groupId } = req.params;
-    const { toUserId, amount } = req.body;
-
-    const fromUserId = req.user._id;
-
-    const result = await settleDebt({
-      groupId,
-      fromUserId,
-      toUserId,
-      amount,
-    });
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: result.message,
     });
-
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
+
 // ======================
-// GET EXPENSES
+// FR3.8 — GET EXPENSE LIST (with filters)
+// GET /expenses/:groupId/history
+// Query params: from, to, category, paidBy, member
 // ======================
-export const getGroupExpensesController = async (req, res) => {
+export const getGroupExpensesController = async (req, res, next) => {
   try {
     const { groupId } = req.params;
-    const userId = req.user._id;
+    const { from, to, category, paidBy, member } = req.query;
 
-    const expenses = await getGroupExpenses(groupId, userId);
+    const expenses = await getGroupExpenses(groupId, req.user._id, {
+      from,
+      to,
+      category,
+      paidBy,
+      member, // FR3.8: filter by any member (payer OR split participant)
+    });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: expenses.length,
       data: expenses,
     });
   } catch (error) {
-  res.status(400);
-  throw error;
+    next(error);
+  }
+};
+
+
+// ======================
+// GET GROUP BALANCES
+// GET /expenses/:groupId/balances
+// ======================
+export const getBalancesController = async (req, res, next) => {
+  try {
+    const balances = await getGroupBalances(req.params.groupId, req.user._id);
+
+    return res.status(200).json({
+      success: true,
+      count: balances.length,
+      data: balances,
+    });
+  } catch (error) {
+    next(error);
   }
 };

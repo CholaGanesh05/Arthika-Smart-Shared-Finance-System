@@ -1,11 +1,13 @@
 import Group from "../models/group.model.js";
 import mongoose from "mongoose";
+import crypto from "crypto";
+import { emitEvent } from "../../../utils/eventEmitter.js";
 
 
 // ======================
 // CREATE GROUP
 // ======================
-export const createGroup = async ({ name, description, members }, userId) => {
+export const createGroup = async ({ name, description, avatar, members }, userId) => {
   if (!name) {
     throw new Error("Group name is required");
   }
@@ -29,12 +31,16 @@ export const createGroup = async ({ name, description, members }, userId) => {
     user: new mongoose.Types.ObjectId(id),
     role: id === userId.toString() ? "owner" : "member",
   }));
+  
+  const inviteCode = crypto.randomBytes(4).toString("hex").toUpperCase();
 
   const group = await Group.create({
     name,
     description,
+    avatar: avatar || "",
     createdBy: new mongoose.Types.ObjectId(userId),
     members: memberObjects,
+    inviteCode,
   });
 
   return group;
@@ -49,7 +55,8 @@ export const getUserGroups = async (userId) => {
     "members.user": userId,
     isActive: true,
   })
-    .select("name description members totalBalance currency createdAt")
+    // FR2.3: inviteCode exposed so owner can share it
+    .select("name description avatar members totalBalance currency inviteCode createdAt")
     .sort({ createdAt: -1 })
     .lean();
 
@@ -98,6 +105,65 @@ export const addMemberToGroup = async (groupId, userIdToAdd, currentUserId) => {
 
   await group.save();
 
+  // FR2.8: emit activity log event
+  emitEvent(groupId, "group:member:joined", { userId: userIdToAdd });
+
+  return group;
+};
+
+
+// ======================
+// JOIN.GROUP VIA INVITE CODE
+// ======================
+export const joinGroupWithCode = async (inviteCode, userId) => {
+  if (!inviteCode) throw new Error("Invite code required");
+
+  const group = await Group.findOne({ inviteCode });
+  if (!group) throw new Error("Invalid invite code");
+
+  if (group.isMember(userId)) {
+    throw new Error("You are already a member of this group");
+  }
+
+  group.members.push({ user: userId, role: "member" });
+  await group.save();
+
+  emitEvent(group._id.toString(), "group:member:joined", { userId });
+
+  return group;
+};
+
+
+// ======================
+// UPDATE MEMBER ROLE
+// ======================
+export const updateMemberRole = async (groupId, targetUserId, newRole, currentUserId) => {
+  if (!mongoose.Types.ObjectId.isValid(groupId) || !mongoose.Types.ObjectId.isValid(targetUserId)) {
+    throw new Error("Invalid IDs");
+  }
+  if (!["owner", "manager", "member"].includes(newRole)) throw new Error("Invalid role");
+
+  const group = await Group.findById(groupId);
+  if (!group) throw new Error("Group not found");
+
+  const currentMember = group.getMember(currentUserId);
+  if (!currentMember || currentMember.role !== "owner") {
+    throw new Error("Only the owner can change roles");
+  }
+
+  const targetMember = group.getMember(targetUserId);
+  if (!targetMember) throw new Error("Target user is not a member");
+
+  // LOGIC FLAW FIX: Prevent the owner from demoting themselves and orphaning the group!
+  if (currentUserId.toString() === targetUserId.toString() && newRole !== "owner") {
+    const ownerCount = group.members.filter(m => m.role === "owner").length;
+    if (ownerCount <= 1) {
+      throw new Error("Cannot demote yourself. The group must have at least one owner.");
+    }
+  }
+
+  targetMember.role = newRole;
+  await group.save();
   return group;
 };
 
@@ -135,4 +201,103 @@ export const getGroupById = async (groupId, userId) => {
   }
 
   return group;
+};
+
+
+// ======================
+// REMOVE MEMBER
+// ======================
+export const removeMemberFromGroup = async (groupId, userIdToRemove, currentUserId) => {
+  if (
+    !mongoose.Types.ObjectId.isValid(groupId) ||
+    !mongoose.Types.ObjectId.isValid(userIdToRemove)
+  ) {
+    throw new Error("Invalid IDs");
+  }
+
+  const group = await Group.findById(groupId);
+  if (!group) throw new Error("Group not found");
+
+  const currentMember = group.getMember(currentUserId);
+  if (!currentMember) throw new Error("You are not a member");
+  if (!["owner", "manager"].includes(currentMember.role) && currentUserId.toString() !== userIdToRemove.toString()) {
+    throw new Error("Not authorized to remove this member");
+  }
+
+  // LOGIC FLAW FIX: Prevent removing the very last owner and permanently orphaning the group
+  const targetMember = group.getMember(userIdToRemove);
+  if (targetMember && targetMember.role === "owner") {
+    const ownerCount = group.members.filter(m => m.role === "owner").length;
+    if (ownerCount <= 1) {
+      throw new Error("Cannot remove the final owner. Transfer ownership to another member before leaving/removing.");
+    }
+  }
+
+  // Ensure zero balances before leaving (Ledger check)
+  const Ledger = mongoose.model("Ledger");
+  const balances = await Ledger.find({
+    group: groupId,
+    $or: [{ from: userIdToRemove }, { to: userIdToRemove }],
+    amount: { $gt: 0 } // LOGIC FLAW FIX: Must explicitly force strictly > 0 math check!
+  });
+
+  if (balances.length > 0) {
+    throw new Error("Cannot remove member with outstanding balances");
+  }
+
+  group.members = group.members.filter(m => m.user.toString() !== userIdToRemove.toString());
+  await group.save();
+  
+  emitEvent(groupId, "group:member:removed", { userId: userIdToRemove });
+  
+  return group;
+};
+
+
+// ======================
+// DELETE GROUP
+// ======================
+export const deleteGroup = async (groupId, currentUserId) => {
+  if (!mongoose.Types.ObjectId.isValid(groupId)) throw new Error("Invalid ID");
+
+  const group = await Group.findById(groupId);
+  if (!group) throw new Error("Group not found");
+
+  const currentMember = group.getMember(currentUserId);
+  if (!currentMember || currentMember.role !== "owner") {
+    throw new Error("Only the owner can delete the group");
+  }
+
+  // FR2.7: check for uncleared debts (amount > 0 strictly)
+  const Ledger = mongoose.model("Ledger");
+  const outstandingDebts = await Ledger.findOne({ group: groupId, amount: { $gt: 0 } });
+  
+  if (outstandingDebts) {
+    throw new Error("Cannot delete group with uncleared debts. All balances must be zero.");
+  }
+
+  await Group.findByIdAndDelete(groupId);
+  return { message: "Group deleted successfully" };
+};
+
+
+// ======================
+// ARCHIVE GROUP (FR2.7)
+// ======================
+export const archiveGroup = async (groupId, currentUserId) => {
+  if (!mongoose.Types.ObjectId.isValid(groupId)) throw new Error("Invalid ID");
+
+  const group = await Group.findById(groupId);
+  if (!group) throw new Error("Group not found");
+
+  const currentMember = group.getMember(currentUserId);
+  if (!currentMember || currentMember.role !== "owner") {
+    throw new Error("Only the owner can archive the group");
+  }
+
+  group.isActive = false;
+  group.archivedAt = new Date();
+  await group.save();
+
+  return { message: "Group archived successfully" };
 };

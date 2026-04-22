@@ -2,9 +2,14 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import path from "path";
+import { fileURLToPath } from "url";
 import routes from "./routes/index.js";
 import errorHandler from "./middlewares/error.middleware.js";
 import rateLimit from "express-rate-limit";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
 const app = express();
 
@@ -59,6 +64,11 @@ app.get("/api/health", (req, res) => {
     message: "Server is running 🚀",
   });
 });
+
+// ======================
+// STATIC FILES — uploaded receipts (FR3.5)
+// ======================
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 // ======================
 // ROUTES

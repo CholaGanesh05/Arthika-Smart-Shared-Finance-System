@@ -1,0 +1,297 @@
+
+SOFTWARE REQUIREMENTS SPECIFICATION
+Arthika
+Smart Shared Finance System
+Using MERN Stack
+Guide: Dr. Aswathy Mohan
+
+Field		Details
+Student Name	Chola Chetan Chukkala
+Roll Number	AM.SC.U4CSE23115
+Course Code	22AIE457
+Project Title	Arthika — Smart Shared Finance System
+Version	1.0
+Date	2nd March 2026
+Stack	MERN (MongoDB, Express.js, React, Node.js)
+ 
+1. Introduction
+1.1 Purpose
+This document specifies the complete Software Requirements for Arthika — a Smart Shared Finance System developed using the MERN stack. Arthika enables groups of people (friends, flatmates, travel companions, event committees) to collaboratively track shared expenses, manage common funds, and settle debts in a transparent, real-time environment.
+This SRS is intended for the development team, project guide, evaluators, and testers. It serves as the primary reference document for design, development, testing, and future maintenance of the system.
+1.2 Document Conventions
+The following abbreviations and conventions are used throughout this document:
+Term / Abbreviation	Meaning
+FR	Functional Requirement
+NFR	Non-Functional Requirement
+API	Application Programming Interface
+JWT	JSON Web Token
+MERN	MongoDB, Express.js, React.js, Node.js
+UPI	Unified Payments Interface
+CRUD	Create, Read, Update, Delete
+SRS	Software Requirements Specification
+UI/UX	User Interface / User Experience
+REST	Representational State Transfer
+SHALL	Indicates a mandatory requirement
+SHOULD	Indicates a recommended but optional requirement
+
+1.3 Intended Audience
+This SRS document is intended for the following stakeholders:
+•	Project Guide / Faculty Evaluator (Dr. Aswathy Mohan) — to review scope, completeness, and feasibility
+•	Developer (Chola Chetan Chukkala) — as the primary implementation reference
+•	Testers — to design and execute test cases based on specified requirements
+•	End Users — friends groups, flatmates, travel groups, event committees who will use the system
+•	Future Maintainers — for understanding system behaviour and extending functionality
+Testers, End Users and Future Maintainers are not included in the submission, however the developer will look into all of those.
+1.4 Product Scope
+Arthika is a web-based collaborative finance management system that addresses a common real-world problem: tracking shared money among a group of people is messy, opaque, and often causes disputes. Existing solutions like Splitwise lack real-time fund management, multiple common kitty accounts, and role-based group governance.
+Arthika fills this gap by providing:
+•	Real-time shared expense tracking with flexible splitting (equal, custom, percentage)
+•	Multiple fund management — common kitty, trip fund, emergency fund, etc.
+•	Automated debt simplification — computing minimum number of settlements required
+•	Role-based group governance — Owner, Manager, Member roles with access control
+•	Settlement recording via Cash or UPI with receipt upload support
+•	Visual analytics — balance graphs, monthly trends, contribution breakdowns
+The system is developed as a MERN stack student project for the Full Stack Development course (22AIE457), demonstrating real-world application of modern web technologies.
+1.5 References
+•	IEEE 830-1998 — IEEE Recommended Practice for Software Requirements Specifications
+•	MERN Stack Official Documentation — MongoDB, Express.js, React.js, Node.js
+•	JSON Web Token (JWT) Standard — RFC 7519
+•	REST API Design Principles — Roy Fielding's Dissertation (2000)
+•	CFOS — Community Financial Operating System (Reference Project, 2026)
+•	Splitwise Application — Conceptual reference for shared expense patterns
+•	bcrypt Documentation — Password hashing library for Node.js
+•	Socket.io Documentation — Real-time bidirectional communication
+ 
+2. Overall Description
+2.1 Product Perspective
+Arthika is a standalone web application that operates within a client-server architecture. It is not a replacement or extension of any existing commercial system — it is purpose-built to solve the shared finance coordination problem for small to medium-sized groups (2–50 members).
+The system follows a three-tier architecture:
+Tier	Technology	Responsibility
+Presentation Layer	React.js (with Redux / Context API)	Renders UI, handles state, calls REST APIs
+Business Logic Layer	Node.js + Express.js	REST APIs, auth middleware, expense logic, debt simplification engine
+Data Layer	MongoDB (Atlas / Local)	Persists users, groups, expenses, ledger entries, settlements
+
+The application exposes all functionality through a RESTful API and is designed to be deployed on any cloud platform (Render, Railway, Vercel, or AWS Free Tier). Socket.io is used for real-time notifications and live balance updates.
+2.2 Product Functions
+At a high level, Arthika provides the following primary functional capabilities:
+•	User Registration and Secure Authentication (JWT-based)
+•	Group Creation and Member Management with Role-Based Access Control
+•	Shared Expense Recording with Multiple Splitting Strategies
+•	Multi-Fund Management (Common Kitty, Trip Fund, Emergency Fund, etc.)
+•	Automated Debt Simplification using Graph-based Minimum Settlement Algorithm
+•	Settlement Recording (Cash / UPI) with Optional Receipt Upload
+•	Real-Time Balance Updates and Notifications via Socket.io
+•	Financial Analytics Dashboard — Monthly Trends, Category Breakdown, Debt Graph
+•	Export of transaction history as CSV/PDF
+•	Group Activity Feed and Audit Log
+2.3 User Classes and Characteristics
+Arthika supports three user roles within each group. A single registered user can hold different roles across different groups.
+Role	Characteristics	Permissions
+Group Owner	Creator of the group; typically initiator of the shared activity	Full control: add/remove members, promote roles, delete group, manage all funds, freeze accounts
+Manager	Trusted member with elevated privileges; manages day-to-day operations	Add expenses, create/manage funds, approve settlements, view full analytics
+Member	Standard group participant; performs routine financial activities	Add own expenses, view shared expenses, record settlements, view own balance and group analytics
+
+2.4 Operating Environment
+Arthika operates in the following environment:
+Component	Environment / Specification
+Client Side	Any modern web browser (Chrome 90+, Firefox 88+, Safari 14+, Edge 90+) on Desktop, Tablet, or Mobile
+Server Side	Node.js v18+ runtime on any Linux/Windows server or cloud platform (Render, Railway, AWS EC2 Free Tier)
+Database	MongoDB v6.0+ (MongoDB Atlas free tier M0 cluster or self-hosted local instance)
+Real-Time	Socket.io v4.x running on the same Node.js server instance
+File Storage	Cloudinary (free tier) or local disk for receipt image uploads
+Network	Internet connectivity required for all operations; no offline mode in v1.0
+
+2.5 Design and Implementation Constraints
+•	The entire system MUST be implemented using the MERN stack (MongoDB, Express.js, React.js, Node.js).
+•	All API endpoints MUST follow RESTful conventions with appropriate HTTP verbs (GET, POST, PUT, PATCH, DELETE).
+•	Authentication MUST use JSON Web Tokens (JWT); no session-based authentication is permitted.
+•	All passwords MUST be hashed using bcrypt with a salt round of minimum 10 before storage.
+•	The UI MUST be fully responsive and usable on screens from 320px (mobile) to 1920px (desktop).
+•	The debt simplification algorithm MUST produce the minimum number of transactions required to settle all debts in a group.
+•	All monetary values MUST be stored and computed in Indian Rupees (INR) using integer paise (100 paise = ₹1) to avoid floating-point precision errors.
+•	The system MUST enforce that every expense split across members sums exactly to the total expense amount.
+•	Third-party libraries may be used (e.g., Mongoose, Socket.io, Chart.js, bcrypt, Multer) as long as they do not replace the MERN core requirement.
+
+2.6 Assumptions and Dependencies
+The following assumptions are made for the scope of this project:
+•	All users have reliable internet access when using the application.
+•	The MongoDB Atlas free tier (M0 cluster) provides sufficient capacity (512 MB) for the student project scale.
+•	Users are assumed to operate in the Indian market and all currency is in INR (₹).
+•	UPI payment settlement is recorded manually in the app — actual UPI payment processing is not integrated in v1.0.
+•	Users are assumed to be adults (18+) who are responsible for the accuracy of their entered data.
+•	The hosting platform (Render/Railway free tier) provides sufficient compute and bandwidth for development and evaluation purposes.
+•	Browser JavaScript is enabled on all client devices.
+The project has the following external dependencies:
+•	MongoDB Atlas — cloud database hosting
+•	npm package registry — dependency installation
+•	Cloudinary (optional) — image hosting for receipt uploads
+•	Socket.io — real-time event communication
+ 
+3. System Features (Functional Requirements)
+3.1 User Registration and Authentication (FR1)
+Description: The system shall provide secure user registration and login functionality.
+Requirements:
+•	FR1.1 — The system shall allow new users to register using full name, email address, and password.
+•	FR1.2 — The system shall validate that the email address is unique; duplicate email registrations shall be rejected with an appropriate error message.
+•	FR1.3 — The system shall validate password strength (minimum 8 characters, at least one uppercase, one lowercase, one digit).
+•	FR1.4 — The system shall hash passwords using bcrypt (salt rounds ≥ 10) before persisting to the database.
+•	FR1.5 — The system shall generate a JWT token upon successful login, valid for 7 days.
+•	FR1.6 — The system shall support profile update (name, avatar image) for authenticated users.
+•	FR1.7 — The system shall support password change with current password verification.
+•	FR1.8 — All protected routes shall require a valid JWT; expired or invalid tokens shall return HTTP 401.
+3.2 Group Management (FR2)
+Description: The system shall allow users to create, join, and manage finance groups.
+Requirements:
+•	FR2.1 — An authenticated user shall be able to create a new group by providing a group name, description, and optional group avatar.
+•	FR2.2 — The group creator shall automatically be assigned the Owner role upon group creation.
+•	FR2.3 — The system shall generate a unique invite link/code for each group, shareable to add new members.
+•	FR2.4 — A user shall be able to join a group using a valid invite code; the user shall be assigned the Member role by default.
+•	FR2.5 — The Owner shall be able to promote a Member to Manager or demote a Manager to Member.
+•	FR2.6 — The Owner or Manager shall be able to remove a member from the group, subject to the constraint that removed members have zero balance.
+•	FR2.7 — The Owner shall be able to archive or delete a group; deletion shall only be permitted when all balances are zero.
+•	FR2.8 — The system shall maintain a group activity log of all major events (member joined, expense added, settlement made).
+3.3 Expense Management (FR3)
+Description: The system shall allow group members to record shared expenses with flexible splitting options.
+Requirements:
+•	FR3.1 — An authenticated group member shall be able to add a shared expense by providing: title, total amount (₹), date, category, payer(s), and split method.
+•	FR3.2 — The system shall support the following split methods:
+○	Equal Split — total divided equally among all selected members
+○	Custom Amount Split — manually specify each member's share (must sum to total)
+○	Percentage Split — specify percentage for each member (must sum to 100%)
+○	Shares Split — assign relative shares (e.g., 2:1:1)
+•	FR3.3 — The system shall validate that the sum of all member shares equals the total expense amount before saving.
+•	FR3.4 — Expenses shall be categorized by predefined categories: Food, Transport, Accommodation, Entertainment, Utilities, Shopping, Medical, Other.
+•	FR3.5 — Members shall be able to attach a photo receipt (JPEG/PNG, max 5MB) to an expense.
+•	FR3.6 — An expense creator or group Owner/Manager shall be able to edit or delete an expense.
+•	FR3.7 — The system shall automatically update all relevant member balances upon expense creation, edit, or deletion.
+•	FR3.8 — The system shall display a chronological expense list with filters by date range, category, and member.
+3.4 Fund Management (FR4)
+Description: The system shall support multiple named fund accounts within a group.
+Requirements:
+•	FR4.1 — The Owner or Manager shall be able to create a named fund (e.g., Common Kitty, Trip Fund, Emergency Fund) within a group.
+•	FR4.2 — A fund shall have: name, description, target amount (optional), and a collected balance.
+•	FR4.3 — Any group member shall be able to contribute to a fund; the system shall record contributions individually.
+•	FR4.4 — The Owner or Manager shall be able to withdraw from a fund with a mandatory reason/description.
+•	FR4.5 — The fund balance shall be computed as total contributions minus total withdrawals; direct balance storage is not permitted.
+•	FR4.6 — The system shall display individual contribution history per fund.
+•	FR4.7 — The system shall support deactivation of a fund when it is no longer needed.
+3.5 Debt Simplification (FR5)
+Description: The system shall compute the minimum number of transactions required to settle all debts within a group.
+Requirements:
+•	FR5.1 — The system shall compute each member's net balance (total amount owed to them minus total they owe others).
+•	FR5.2 — The system shall apply a greedy debt simplification algorithm to produce the minimum payment transactions needed for all balances to reach zero.
+•	FR5.3 — The simplified settlement plan shall be presented to members showing: who pays whom, and how much.
+•	FR5.4 — The simplification shall be recomputed dynamically whenever any transaction changes group balances.
+•	FR5.5 — The system shall clearly distinguish between individual pair-wise balances and the simplified settlement plan.
+3.6 Settlement Recording (FR6)
+Description: The system shall allow members to record debt settlements.
+Requirements:
+•	FR6.1 — A member shall be able to record a payment to another member, specifying: payer, payee, amount, date, and payment method (Cash / UPI).
+•	FR6.2 — For UPI settlements, the system shall support optional entry of UPI transaction reference ID.
+•	FR6.3 — The system shall update the relevant member balances immediately upon recording a settlement.
+•	FR6.4 — The Owner or Manager shall be able to mark a settlement as confirmed or disputed.
+•	FR6.5 — Settlement history shall be maintained and accessible per group and per member.
+3.7 Analytics Dashboard (FR7)
+Description: The system shall provide visual analytics for groups and individual members.
+Requirements:
+•	FR7.1 — The dashboard shall display total group spending, average per-member spending, and outstanding balances.
+•	FR7.2 — The system shall render monthly expense trend charts (bar chart — last 6 months).
+•	FR7.3 — The system shall render a category breakdown pie chart for group expenses.
+•	FR7.4 — The system shall display a member contribution leaderboard.
+•	FR7.5 — Each member shall be able to view their own personal balance summary showing net amounts owed to/by each other group member.
+•	FR7.6 — The system shall support export of group transaction history as a CSV file.
+3.8 Real-Time Notifications (FR8)
+Description: The system shall provide real-time updates to group members.
+Requirements:
+•	FR8.1 — The system shall use Socket.io to push real-time events to all online group members.
+•	FR8.2 — Events that trigger real-time notifications: new expense added, expense edited/deleted, settlement recorded, member joined/left.
+•	FR8.3 — Balances displayed on the UI shall refresh automatically upon receiving a real-time event without requiring a page reload.
+•	FR8.4 — The system shall maintain an in-app notification list showing the last 50 events per group.
+ 
+4. External Interface Requirements
+4.1 User Interface
+The Arthika user interface shall be a responsive Single Page Application (SPA) built with React.js. The interface shall work correctly on screen widths from 320px (mobile) to 1920px (desktop) without horizontal scrolling.
+Key interface screens and requirements:
+•	FR-UI-1 — Landing Page: Application overview, login and register CTAs.
+•	FR-UI-2 — Authentication Screens: Login form, register form, password change form with client-side validation and real-time error display.
+•	FR-UI-3 — Dashboard: Personal balance summary across all groups; quick actions; recent activity feed.
+•	FR-UI-4 — Group Home: Member list with balances, fund list, simplified settlement plan, group activity feed.
+•	FR-UI-5 — Expense List: Filterable, searchable, paginated expense table with category badges and member avatar chips.
+•	FR-UI-6 — Add/Edit Expense Form: Dynamic split calculator that updates shares in real time as the user adjusts amounts.
+•	FR-UI-7 — Fund Detail Page: Contribution history, target progress bar, withdraw form.
+•	FR-UI-8 — Analytics Dashboard: Chart.js rendered charts — bar, pie, and balance graph.
+•	FR-UI-9 — Settings: Group settings (Owner only), profile settings.
+UI Standards: All forms shall display inline validation errors. All destructive actions (delete, remove member) shall require a confirmation dialog. Loading states shall be communicated with skeleton screens or spinners.
+4.2 Hardware Interface
+Arthika is a web application with no direct hardware interface requirements beyond standard computing hardware:
+•	Any standard desktop, laptop, tablet, or smartphone with a modern web browser.
+•	Minimum screen resolution of 320x568px (iPhone SE, portrait mode).
+•	Camera/file system access is required only if the user chooses to upload receipt images (optional feature).
+4.3 Software Interface
+Software/Service	Version	Purpose / Interface Details
+MongoDB	v6.0+	NoSQL database; accessed via Mongoose ODM; Atlas cloud or local
+Node.js + Express.js	18+ / 4.x	REST API server; middleware for auth, error handling, request parsing
+React.js	18.x	Frontend SPA; communicates with backend via Axios HTTP client
+Socket.io	4.x	WebSocket-based real-time communication between server and React client
+Cloudinary API	REST API	Third-party image hosting for receipt uploads and profile avatars
+
+4.4 Communication Interface
+•	The system SHALL communicate between client and server exclusively over HTTPS in production. HTTP is only permissible in local development environments.
+•	All API communication SHALL use the JSON data format (Content-Type: application/json).
+•	The backend REST API SHALL follow RESTful URL patterns (e.g., /api/v1/groups/:groupId/expenses).
+•	Real-time communication SHALL use the WebSocket protocol via Socket.io, with a fallback to HTTP long-polling.
+•	API responses SHALL include standardized JSON envelopes: { success: boolean, data: object, message: string, error: object }.
+•	HTTP status codes SHALL be used correctly: 200 (OK), 201 (Created), 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 500 (Internal Server Error).
+ 
+5. Non-Functional Requirements
+5.1 Performance Requirements (NFR1)
+Arthika must deliver a responsive, snappy user experience given that it handles financial data where delays can erode trust.
+#	Requirement	Specification
+NFR1.1	API Response Time	All REST API endpoints shall respond within 2 seconds under normal load (≤ 50 concurrent users). Read-only endpoints (list expenses, get balances) shall respond within 1 second.
+NFR1.2	Page Load Time	Initial page load (LCP — Largest Contentful Paint) shall complete within 3 seconds on a 4G mobile connection. Subsequent navigation within the SPA shall feel near-instant (< 300ms) via client-side routing.
+NFR1.3	Real-Time Latency	Socket.io events (expense added, balance updated) shall be delivered to all online group members within 500 milliseconds of the triggering action.
+NFR1.4	Debt Computation Time	The debt simplification algorithm shall compute the minimum settlement plan for a group of up to 50 members within 100 milliseconds on the server.
+NFR1.5	Concurrent Users	The system shall support a minimum of 50 simultaneous authenticated users without performance degradation beyond the specified response time limits.
+
+5.2 Security Requirements (NFR2)
+Given that Arthika handles sensitive financial data and personal balance information, security is a primary non-functional concern.
+#	Requirement	Specification
+NFR2.1	Password Security	All user passwords shall be hashed using bcrypt with a salt factor of at least 10 before storage. Plaintext passwords shall NEVER be stored or logged at any point.
+NFR2.2	Token-Based Auth	JWT tokens shall be used for all authenticated sessions. Tokens shall be signed using HS256 or RS256 algorithm with a secret/key stored only in environment variables. Tokens shall expire after 7 days.
+NFR2.3	Authorization Control	All API routes except /api/auth/register and /api/auth/login shall require a valid JWT. Group-specific routes shall additionally verify group membership. Destructive admin operations (delete group, remove member) shall verify Owner role.
+NFR2.4	Data Isolation	A user shall only be able to access data belonging to groups they are a verified member of. Cross-group data access shall be technically prevented at the API layer, not just the UI layer.
+NFR2.5	Input Validation	All API inputs shall be validated and sanitized on the server side using express-validator or Joi. MongoDB injection attacks shall be prevented by using Mongoose schemas with strict type enforcement.
+NFR2.6	HTTPS Enforcement	The production deployment shall enforce HTTPS for all traffic. HTTP requests to the server shall be automatically redirected to HTTPS. Secure and HttpOnly flags shall be set on any cookies used.
+NFR2.7	Environment Secrets	All credentials (MongoDB URI, JWT secret, Cloudinary API keys) shall be stored exclusively in environment variables (.env files). No secrets shall be committed to the version control repository.
+
+5.3 Reliability Requirements (NFR3)
+Arthika must be dependable as it manages real financial obligations between real people. Errors or data inconsistencies can directly cause disputes.
+#	Requirement	Specification
+NFR3.1	Data Consistency	All financial write operations (create expense, record settlement, fund contribution) shall be atomic. If any part of a multi-document write fails, the entire operation shall be rolled back to prevent partial data corruption. MongoDB transactions shall be used where required.
+NFR3.2	Balance Accuracy	All monetary computations shall use integer arithmetic in paise (1 INR = 100 paise) to avoid floating-point rounding errors. The system shall enforce that the sum of all members' net balances within a group is always zero (zero-sum guarantee).
+NFR3.3	Error Handling	The system shall handle all invalid inputs, network errors, and server errors gracefully. Unhandled exceptions shall be caught by a global error middleware and return a meaningful 500 response without crashing the server process.
+NFR3.4	Uptime	The system shall target 99% uptime during the evaluation and demonstration period. Planned maintenance shall be conducted outside peak usage hours.
+NFR3.5	Input Boundary Handling	The system shall validate boundary conditions: expense amounts must be > 0, group member count shall not exceed 50, expense titles shall not exceed 120 characters, and descriptions shall not exceed 500 characters.
+
+5.4 Usability Requirements (NFR4)
+Arthika is designed to be used by non-technical users in everyday social situations. The interface must be intuitive, forgiving, and accessible.
+#	Requirement	Specification
+NFR4.1	Learnability	A new user with no prior experience of the system shall be able to register, create a group, and add their first shared expense within 5 minutes, without requiring any documentation or tutorial.
+NFR4.2	Error Feedback	All form fields shall display inline validation errors adjacent to the relevant field. Error messages shall be human-readable (e.g., 'Split amounts must add up to ₹1,200.00, currently ₹1,150.00') — not generic codes.
+NFR4.3	Responsive Design	The UI shall be fully functional and free of horizontal scroll on all viewports from 320px (mobile portrait) to 1920px (desktop wide). Touch targets shall be minimum 44x44px on mobile, per WCAG 2.1 guidelines.
+NFR4.4	Confirmations for Destructive Actions	All irreversible actions (delete expense, remove member, delete group) shall require explicit user confirmation via a modal dialog before execution. The confirmation dialog shall clearly state the consequences.
+NFR4.5	Loading State Feedback	All asynchronous operations shall communicate their in-progress state to the user via loading spinners, skeleton screens, or disabled button states. The user shall never be left wondering if an action was registered.
+NFR4.6	Currency Formatting	All monetary values displayed in the UI shall be formatted in Indian Rupee format (e.g., ₹1,23,456.78) using the Intl.NumberFormat API with locale 'en-IN'.
+
+5.5 Maintainability Requirements (NFR5)
+Arthika must be written in a clean, modular, and well-documented style so that the code is understandable to the project guide, future developers, and the student during code reviews and demonstrations.
+#	Requirement	Specification
+NFR5.1	Backend Architecture	The Express.js backend shall follow a strict MVC (Model-View-Controller) pattern. Code shall be organized into dedicated folders: /models (Mongoose schemas), /controllers (request handlers), /routes (Express routers), /middleware (auth, error, validation), and /utils (helper functions).
+NFR5.2	Frontend Architecture	The React.js frontend shall use a component-based architecture with feature-based folder organization: /components (reusable UI), /pages (route-level screens), /hooks (custom hooks), /context or /store (global state), /services (API call functions), and /utils.
+NFR5.3	Code Documentation	All major functions, Mongoose models, and API routes shall include JSDoc-style comments describing their purpose, parameters, and return values. Complex business logic (especially the debt simplification algorithm) shall include inline comments explaining the approach.
+NFR5.4	Version Control	The project shall be maintained in a Git repository (GitHub). Commits shall have clear, descriptive messages following conventional commit format (e.g., 'feat: add debt simplification algorithm', 'fix: correct split validation logic'). A .gitignore file shall exclude node_modules and .env files.
+NFR5.5	Environment Configuration	All environment-specific configurations (database URI, API keys, port number, JWT secret) shall be managed through environment variables. A .env.example file shall be committed to the repository showing all required variable names without their values.
+NFR5.6	Modular Business Logic	Core business logic such as the debt simplification algorithm, expense split calculation, and balance computation shall be isolated in dedicated utility/service modules, completely separate from the Express route handlers. This separation enables independent unit testing.
+NFR5.7	README Documentation	The repository shall contain a comprehensive README.md file that includes: project overview, tech stack, prerequisites, local setup instructions (step-by-step), environment variable reference, API endpoint summary, and deployment instructions.
+
+The maintainability requirements collectively ensure that the Arthika codebase is not a 'black box' — it can be reviewed, extended, and debugged by any developer familiar with the MERN stack without requiring extensive reverse-engineering of the code structure.

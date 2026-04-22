@@ -79,7 +79,8 @@ export const getGroupBalances = async (groupId, userId) => {
   // ======================
   const balances = Array.from(balanceMap.values()).map((b) => ({
     ...b,
-    amount: Number(b.amount.toFixed(2)),
+    amount: b.amount,
+    amountRupees: (b.amount / 100).toFixed(2),
   }));
 
   // ======================

@@ -16,8 +16,10 @@ export const register = async (req, res) => {
       data: result,
     });
   } catch (error) {
-  res.status(400);
-  throw error;
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
