@@ -53,7 +53,7 @@ export const api = {
     })
   },
   getMe(token, signal) {
-    return request('/user/me', { token, signal })
+    return request('/users/me', { token, signal })
   },
   getGroups(token, signal) {
     return request('/groups', { token, signal })
@@ -131,14 +131,14 @@ export const api = {
     return request(`/analytics/member/${groupId}`, { token, signal })
   },
   updateProfile(token, body) {
-    return request('/user/profile', {
+    return request('/users/profile', {
       method: 'PUT',
       token,
       body,
     })
   },
   updatePassword(token, body) {
-    return request('/user/password', {
+    return request('/users/password', {
       method: 'PUT',
       token,
       body,
