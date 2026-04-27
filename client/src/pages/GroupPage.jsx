@@ -386,64 +386,69 @@ export default function GroupPage() {
 
   if (!group) {
     return (
-      <EmptyState
-        title="Group not available"
-        description="This group could not be loaded with the current token."
-        action={
-          <Link className="button button--ghost" to="/dashboard">
-            Back to dashboard
-          </Link>
-        }
-      />
+      <div className="max-w-2xl mx-auto mt-12">
+        <EmptyState
+          title="Group not available"
+          description="This group could not be loaded with the current token."
+          action={
+            <Link className="btn btn-primary" to="/dashboard">
+              Back to dashboard
+            </Link>
+          }
+        />
+      </div>
     )
   }
 
   return (
     <>
-      <section className="page-hero">
-        <div>
-          <Link className="inline-link" to="/dashboard">
-            ← Back to dashboard
+      <section className="flex flex-col md:flex-row gap-6 md:items-center justify-between fin-card bg-brand text-white border-none rounded-2xl shadow-fin-md mb-6">
+        <div className="flex-1">
+          <Link className="text-accent-light hover:text-white text-sm font-semibold mb-4 inline-block transition-fin" to="/dashboard">
+            &larr; Back to dashboard
           </Link>
-          <p className="hero-badge">{currentRole} access</p>
-          <h1>{group.name}</h1>
-          <p className="page-hero__lede">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="fin-pill bg-white/20 text-white border-white/30 text-[10px] uppercase tracking-wider">{currentRole} access</span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">{group.name}</h1>
+          <p className="text-sm text-slate-300 max-w-lg">
             {group.description || 'No description yet. This group is ready for expenses, settlements, and funds.'}
           </p>
         </div>
-        <div className="hero-panel hero-panel--compact">
-          <p className="hero-panel__eyebrow">At a glance</p>
-          <p>Created by {group.createdBy?.name || 'Unknown'}.</p>
-          <p>{group.members?.length ?? 0} active members in this workspace.</p>
-          <div className="button-row" style={{ marginTop: '1rem' }}>
-            <Link className="button button--ghost" to={`/groups/${groupId}/analytics`}>Analytics Dashboard</Link>
+        <div className="bg-white/10 p-5 rounded-xl border border-white/20 backdrop-blur-md md:max-w-xs flex flex-col gap-3">
+          <p className="text-xs font-bold text-white tracking-widest uppercase m-0">At a glance</p>
+          <p className="text-sm text-slate-200 m-0">Created by <strong className="text-white">{group.createdBy?.name || 'Unknown'}</strong>.</p>
+          <p className="text-sm text-slate-200 m-0"><strong className="text-white">{group.members?.length ?? 0}</strong> active members in this workspace.</p>
+          <div className="flex gap-2 mt-2">
+            <Link className="btn bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs px-3 py-1.5 flex-1 text-center" to={`/groups/${groupId}/analytics`}>Analytics</Link>
             {['owner', 'manager'].includes(currentRole) && (
-              <Link className="button button--ghost" to={`/groups/${groupId}/settings`}>Group Settings</Link>
+              <Link className="btn bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs px-3 py-1.5 flex-1 text-center" to={`/groups/${groupId}/settings`}>Settings</Link>
             )}
           </div>
         </div>
       </section>
 
-      <section className="stats-grid">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Members" value={group.members?.length ?? 0} />
         <StatCard label="Pair-wise balances" value={balances.length} />
-        <StatCard label="Settlement plan lines" value={settlementPlan.length} />
+        <StatCard label="Settlement plan" value={settlementPlan.length} />
         <StatCard label="Expense history" value={expenses.length} />
       </section>
 
-      {notice ? <p className="notice notice--success">{notice}</p> : null}
-      {error ? <p className="notice notice--error">{error}</p> : null}
+      {notice ? <p className="fin-pill fin-pill-positive w-full justify-start text-sm px-4 py-3 mb-6">{notice}</p> : null}
+      {error ? <p className="fin-pill fin-pill-negative w-full justify-start text-sm px-4 py-3 mb-6">{error}</p> : null}
 
-      <div className="section-grid section-grid--wide">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SectionCard
           eyebrow="Actions"
           subtitle="Equal splits use the backend’s automatic member distribution. Exact splits must add up perfectly."
           title="Add expense"
         >
-          <form className="form-grid" onSubmit={handleExpenseSubmit}>
-            <label className="input-field">
-              <span>Description</span>
+          <form className="flex flex-col gap-4" onSubmit={handleExpenseSubmit}>
+            <label className="block">
+              <span className="fin-label">Description</span>
               <input
+                className="fin-input"
                 onChange={(event) =>
                   setExpenseForm((current) => ({
                     ...current,
@@ -456,27 +461,32 @@ export default function GroupPage() {
               />
             </label>
 
-            <label className="input-field">
-              <span>Amount</span>
-              <input
-                min="1"
-                onChange={(event) =>
-                  setExpenseForm((current) => ({
-                    ...current,
-                    amount: event.target.value,
-                  }))
-                }
-                placeholder="1200"
-                required
-                step="1"
-                type="number"
-                value={expenseForm.amount}
-              />
+            <label className="block">
+              <span className="fin-label">Amount</span>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                <input
+                  className="fin-input pl-8"
+                  min="1"
+                  onChange={(event) =>
+                    setExpenseForm((current) => ({
+                      ...current,
+                      amount: event.target.value,
+                    }))
+                  }
+                  placeholder="1200"
+                  required
+                  step="1"
+                  type="number"
+                  value={expenseForm.amount}
+                />
+              </div>
             </label>
 
-            <label className="input-field">
-              <span>Split type</span>
+            <label className="block">
+              <span className="fin-label">Split type</span>
               <select
+                className="fin-input appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyMCAyMCIgc3Ryb2tlPSIjNmI3MjgwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNNiA4bDQgNCA0LTQiLz48L3N2Zz4=')] bg-no-repeat bg-[position:right_1rem_center] bg-[length:1.2em_1.2em]"
                 onChange={(event) =>
                   setExpenseForm((current) => ({
                     ...current,
@@ -491,18 +501,19 @@ export default function GroupPage() {
             </label>
 
             {expenseForm.splitType === 'exact' ? (
-              <div className="stack">
-                <p className="helper-text">
-                  Exact split total: {formatCurrency(totalExactSplit)}
+              <div className="flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <p className="text-sm font-semibold text-slate-700">
+                  Exact split total: <span className="tabular-nums font-bold text-brand">{formatCurrency(totalExactSplit)}</span>
                 </p>
-                <div className="mini-grid">
+                <div className="grid grid-cols-2 gap-3">
                   {group.members?.map((member) => {
                     const memberId = getEntityId(member.user)
 
                     return (
-                      <label className="input-field" key={memberId}>
-                        <span>{member.user?.name || memberId}</span>
+                      <label className="block" key={memberId}>
+                        <span className="text-xs font-semibold text-slate-600 mb-1 block truncate">{member.user?.name || memberId}</span>
                         <input
+                          className="fin-input py-2 text-sm"
                           min="0"
                           onChange={(event) =>
                             setExpenseForm((current) => ({
@@ -525,8 +536,8 @@ export default function GroupPage() {
               </div>
             ) : null}
 
-            <div className="button-row">
-              <button className="button button--primary" disabled={submitting.expense} type="submit">
+            <div className="flex justify-end mt-2">
+              <button className="btn btn-primary w-full sm:w-auto" disabled={submitting.expense} type="submit">
                 {submitting.expense ? 'Saving expense...' : 'Add expense'}
               </button>
             </div>
@@ -538,10 +549,11 @@ export default function GroupPage() {
           subtitle="Only debts where you are the payer can be settled from this form, because the API uses your authenticated user ID as the source."
           title="Record a settlement"
         >
-          <form className="form-grid" onSubmit={handleSettlementSubmit}>
-            <label className="input-field">
-              <span>Paying to</span>
+          <form className="flex flex-col gap-4" onSubmit={handleSettlementSubmit}>
+            <label className="block">
+              <span className="fin-label">Paying to</span>
               <select
+                className="fin-input appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyMCAyMCIgc3Ryb2tlPSIjNmI3MjgwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNNiA4bDQgNCA0LTQiLz48L3N2Zz4=')] bg-no-repeat bg-[position:right_1rem_center] bg-[length:1.2em_1.2em]"
                 onChange={(event) => {
                   const selected = payableSettlements.find(
                     (item) => getEntityId(item.to) === event.target.value,
@@ -565,26 +577,31 @@ export default function GroupPage() {
               </select>
             </label>
 
-            <label className="input-field">
-              <span>Amount</span>
-              <input
-                min="1"
-                onChange={(event) =>
-                  setSettlementForm((current) => ({
-                    ...current,
-                    amount: event.target.value,
-                  }))
-                }
-                required
-                step="0.01"
-                type="number"
-                value={settlementForm.amount}
-              />
+            <label className="block">
+              <span className="fin-label">Amount</span>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                <input
+                  className="fin-input pl-8"
+                  min="1"
+                  onChange={(event) =>
+                    setSettlementForm((current) => ({
+                      ...current,
+                      amount: event.target.value,
+                    }))
+                  }
+                  required
+                  step="0.01"
+                  type="number"
+                  value={settlementForm.amount}
+                />
+              </div>
             </label>
 
-            <label className="input-field">
-              <span>Method</span>
+            <label className="block">
+              <span className="fin-label">Method</span>
               <select
+                className="fin-input appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyMCAyMCIgc3Ryb2tlPSIjNmI3MjgwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNNiA4bDQgNCA0LTQiLz48L3N2Zz4=')] bg-no-repeat bg-[position:right_1rem_center] bg-[length:1.2em_1.2em]"
                 onChange={(event) =>
                   setSettlementForm((current) => ({
                     ...current,
@@ -598,9 +615,10 @@ export default function GroupPage() {
               </select>
             </label>
 
-            <label className="input-field">
-              <span>Reference</span>
+            <label className="block">
+              <span className="fin-label">Reference</span>
               <input
+                className="fin-input"
                 onChange={(event) =>
                   setSettlementForm((current) => ({
                     ...current,
@@ -612,9 +630,9 @@ export default function GroupPage() {
               />
             </label>
 
-            <div className="button-row">
+            <div className="flex justify-end mt-2">
               <button
-                className="button button--primary"
+                className="btn btn-primary w-full sm:w-auto"
                 disabled={submitting.settlement || !payableSettlements.length}
                 type="submit"
               >
@@ -629,11 +647,12 @@ export default function GroupPage() {
           subtitle="The current backend lets us create and open funds, but not list all funds by group. Created or linked fund IDs are saved on this device."
           title="Fund management"
         >
-          <div className="stack">
-            <form className="form-grid" onSubmit={handleFundSubmit}>
-              <label className="input-field">
-                <span>Fund name</span>
+          <div className="flex flex-col gap-8">
+            <form className="flex flex-col gap-4" onSubmit={handleFundSubmit}>
+              <label className="block">
+                <span className="fin-label">Fund name</span>
                 <input
+                  className="fin-input"
                   onChange={(event) =>
                     setFundForm((current) => ({
                       ...current,
@@ -646,9 +665,10 @@ export default function GroupPage() {
                 />
               </label>
 
-              <label className="input-field">
-                <span>Description</span>
+              <label className="block">
+                <span className="fin-label">Description</span>
                 <textarea
+                  className="fin-input min-h-[5rem]"
                   onChange={(event) =>
                     setFundForm((current) => ({
                       ...current,
@@ -656,29 +676,30 @@ export default function GroupPage() {
                     }))
                   }
                   placeholder="What the fund is meant for."
-                  rows={3}
+                  rows={2}
                   value={fundForm.description}
                 />
               </label>
 
-              <div className="button-row">
-                <button className="button button--primary" disabled={submitting.fund} type="submit">
+              <div className="flex justify-end mt-2">
+                <button className="btn btn-primary w-full sm:w-auto" disabled={submitting.fund} type="submit">
                   {submitting.fund ? 'Creating fund...' : 'Create fund'}
                 </button>
               </div>
             </form>
 
-            <form className="inline-form" onSubmit={handleRememberFund}>
-              <label className="input-field input-field--inline">
-                <span>Open an existing fund by ID</span>
+            <form className="flex flex-col sm:flex-row items-end gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl" onSubmit={handleRememberFund}>
+              <label className="block flex-1 w-full">
+                <span className="text-xs font-semibold text-slate-600 block mb-1">Open an existing fund by ID</span>
                 <input
+                  className="fin-input py-2.5 text-sm"
                   onChange={(event) => setRememberFundId(event.target.value)}
                   placeholder="Paste fund ID"
                   value={rememberFundId}
                 />
               </label>
               <button
-                className="button button--ghost"
+                className="btn btn-secondary w-full sm:w-auto py-2.5"
                 disabled={submitting.rememberFund}
                 type="submit"
               >
@@ -693,10 +714,11 @@ export default function GroupPage() {
           subtitle="Because the API currently expects a raw Mongo user ID, this is a low-level add-member flow rather than an invite flow."
           title="Add member by user ID"
         >
-          <form className="inline-form" onSubmit={handleMemberSubmit}>
-            <label className="input-field input-field--inline">
-              <span>User ID</span>
+          <form className="flex flex-col sm:flex-row items-end gap-3" onSubmit={handleMemberSubmit}>
+            <label className="block flex-1 w-full">
+              <span className="fin-label">User ID</span>
               <input
+                className="fin-input"
                 disabled={!['owner', 'manager'].includes(currentRole)}
                 onChange={(event) =>
                   setMemberForm({
@@ -708,7 +730,7 @@ export default function GroupPage() {
               />
             </label>
             <button
-              className="button button--ghost"
+              className="btn btn-secondary py-3 w-full sm:w-auto"
               disabled={submitting.member || !['owner', 'manager'].includes(currentRole)}
               type="submit"
             >
@@ -725,38 +747,38 @@ export default function GroupPage() {
           title="Known funds"
         >
           {fundSnapshots.length ? (
-            <div className="group-grid">
+            <div className="grid grid-cols-1 gap-4">
               {fundSnapshots.map((fund) => {
                 const fundId = getEntityId(fund)
 
                 return (
-                  <article className="group-card" key={fundId}>
-                    <div className="group-card__header">
-                      <div>
-                        <p className="group-card__eyebrow">Fund ID • {fundId}</p>
-                        <h3>{fund.name}</h3>
+                  <article className="border border-slate-200 rounded-2xl p-5 hover:shadow-fin-md transition-fin flex flex-col gap-4 bg-slate-50/50" key={fundId}>
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="overflow-hidden">
+                        <p className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-1 truncate">Fund ID • {fundId}</p>
+                        <h3 className="text-lg font-bold text-brand m-0 leading-tight truncate">{fund.name}</h3>
                       </div>
-                      <span className={`pill${fund.unavailable ? ' pill--negative' : ''}`}>
+                      <span className={`fin-pill whitespace-nowrap ${fund.unavailable ? 'fin-pill-negative' : 'fin-pill-neutral'}`}>
                         {fund.unavailable ? 'Unavailable' : 'Saved'}
                       </span>
                     </div>
 
-                    <p>
+                    <p className="text-sm text-slate-600 m-0">
                       {fund.unavailable
                         ? 'This saved fund could not be fetched right now.'
-                        : `Current balance: ${formatCurrency(fund.balance)}`}
+                        : <span className="font-semibold">Current balance: <span className="tabular-nums">{formatCurrency(fund.balance)}</span></span>}
                     </p>
 
-                    <div className="button-row">
+                    <div className="flex gap-2 pt-2 border-t border-slate-200/60">
                       <Link
-                        className="button button--ghost"
+                        className="btn btn-secondary flex-1"
                         state={{ groupId }}
                         to={`/funds/${fundId}`}
                       >
                         Open fund
                       </Link>
                       <button
-                        className="button button--ghost"
+                        className="btn btn-ghost text-red-600 hover:bg-red-50"
                         onClick={() => handleForgetFund(fundId)}
                         type="button"
                       >
@@ -776,39 +798,39 @@ export default function GroupPage() {
         </SectionCard>
 
         <SectionCard eyebrow="People" subtitle="Roles come from the backend group document." title="Members">
-          <div className="list-stack">
+          <div className="flex flex-col gap-3">
             {group.members?.map((member) => (
-              <article className="list-row" key={getEntityId(member.user)}>
-                <div className="avatar-chip">{getInitials(member.user?.name)}</div>
-                <div className="list-row__content">
-                  <strong>{member.user?.name || 'Unknown member'}</strong>
-                  <p>{member.user?.email || getEntityId(member.user)}</p>
+              <article className="flex items-center gap-4 p-4 border border-slate-200 rounded-xl bg-white hover:border-slate-300 transition-fin" key={getEntityId(member.user)}>
+                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm shrink-0">{getInitials(member.user?.name)}</div>
+                <div className="flex-1 overflow-hidden">
+                  <strong className="block text-sm text-brand truncate">{member.user?.name || 'Unknown member'}</strong>
+                  <p className="text-xs text-slate-500 truncate m-0">{member.user?.email || getEntityId(member.user)}</p>
                 </div>
-                <span className="pill">{member.role}</span>
+                <span className="fin-pill fin-pill-neutral capitalize">{member.role}</span>
               </article>
             ))}
           </div>
         </SectionCard>
       </div>
 
-      <div className="section-grid section-grid--wide">
+      <div className="grid grid-cols-1 gap-6">
         <SectionCard eyebrow="Balances" subtitle="Direct pair-wise obligations from the ledger." title="Who owes whom">
           {balances.length ? (
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
+            <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+              <table className="w-full text-left border-collapse min-w-[32rem]">
+                <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th>From</th>
-                    <th>To</th>
-                    <th>Amount</th>
+                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">From</th>
+                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">To</th>
+                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-200">
                   {balances.map((balance) => (
-                    <tr key={`${getEntityId(balance.from)}-${getEntityId(balance.to)}`}>
-                      <td>{balance.from?.name}</td>
-                      <td>{balance.to?.name}</td>
-                      <td>{formatCurrency(balance.amount)}</td>
+                    <tr className="hover:bg-slate-50 transition-fin" key={`${getEntityId(balance.from)}-${getEntityId(balance.to)}`}>
+                      <td className="py-3 px-4 text-sm font-semibold text-brand">{balance.from?.name}</td>
+                      <td className="py-3 px-4 text-sm font-semibold text-brand">{balance.to?.name}</td>
+                      <td className="py-3 px-4 text-sm font-bold tabular-nums text-brand text-right">{formatCurrency(balance.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -828,16 +850,16 @@ export default function GroupPage() {
           title="Settlement plan"
         >
           {settlementPlan.length ? (
-            <div className="list-stack">
+            <div className="flex flex-col gap-3">
               {settlementPlan.map((item) => (
-                <article className="list-row" key={`${getEntityId(item.from)}-${getEntityId(item.to)}`}>
-                  <div className="list-row__content">
-                    <strong>
-                      {item.from?.name} → {item.to?.name}
+                <article className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-white hover:border-slate-300 transition-fin" key={`${getEntityId(item.from)}-${getEntityId(item.to)}`}>
+                  <div className="flex-1">
+                    <strong className="block text-sm text-brand">
+                      {item.from?.name} &rarr; {item.to?.name}
                     </strong>
-                    <p>{formatCurrency(item.amount)}</p>
+                    <p className="text-lg font-bold tabular-nums text-brand m-0">{formatCurrency(item.amount)}</p>
                   </div>
-                  <span className="pill pill--neutral">Recommended</span>
+                  <span className="fin-pill fin-pill-neutral hidden sm:inline-flex">Recommended</span>
                 </article>
               ))}
             </div>
@@ -850,13 +872,14 @@ export default function GroupPage() {
         </SectionCard>
       </div>
 
-      <div className="section-grid section-grid--wide">
+      <div className="grid grid-cols-1 gap-6">
         <SectionCard eyebrow="Expense history" subtitle="Filter, search, and review all group expenses." title="Recorded expenses">
-          <div className="stack">
-            <div className="inline-form" style={{ gap: '1rem', flexWrap: 'wrap' }}>
-              <label className="input-field input-field--inline" style={{ flex: '1 1 200px' }}>
-                <span>Search</span>
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <label className="block flex-1">
+                <span className="fin-label">Search</span>
                 <input
+                  className="fin-input"
                   onChange={(e) => {
                     setExpenseSearch(e.target.value)
                     setExpensePage(1)
@@ -865,9 +888,10 @@ export default function GroupPage() {
                   value={expenseSearch}
                 />
               </label>
-              <label className="input-field input-field--inline" style={{ flex: '0 0 auto' }}>
-                <span>Category</span>
+              <label className="block sm:w-48">
+                <span className="fin-label">Category</span>
                 <select
+                  className="fin-input appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyMCAyMCIgc3Ryb2tlPSIjNmI3MjgwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNNiA4bDQgNCA0LTQiLz48L3N2Zz4=')] bg-no-repeat bg-[position:right_1rem_center] bg-[length:1.2em_1.2em]"
                   onChange={(e) => {
                     setExpenseCategory(e.target.value)
                     setExpensePage(1)
@@ -889,44 +913,43 @@ export default function GroupPage() {
 
             {paginatedExpenses.length ? (
               <>
-                <div className="table-wrap">
-                  <table className="data-table">
-                    <thead>
+                <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+                  <table className="w-full text-left border-collapse min-w-[48rem]">
+                    <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th>Date</th>
-                        <th>Description</th>
-                        <th>Category</th>
-                        <th>Payer</th>
-                        <th>Amount</th>
-                        <th>Splits</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Category</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Payer</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Splits</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-200">
                       {paginatedExpenses.map((expense) => (
-                        <tr key={getEntityId(expense)}>
-                          <td style={{ whiteSpace: 'nowrap' }}>{formatDate(expense.date || expense.createdAt)}</td>
-                          <td>
-                            <strong>{expense.title || expense.description}</strong>
-                            <br />
-                            <small style={{ color: 'var(--color-text-dim)' }}>{expense.splitType} split</small>
+                        <tr className="hover:bg-slate-50 transition-fin" key={getEntityId(expense)}>
+                          <td className="py-3 px-4 text-sm text-slate-500 whitespace-nowrap">{formatDate(expense.date || expense.createdAt)}</td>
+                          <td className="py-3 px-4">
+                            <strong className="block text-sm text-brand">{expense.title || expense.description}</strong>
+                            <small className="text-xs text-slate-400 capitalize">{expense.splitType} split</small>
                           </td>
-                          <td>
-                            <span className="pill pill--neutral">{expense.category || 'Other'}</span>
+                          <td className="py-3 px-4">
+                            <span className="fin-pill fin-pill-neutral font-medium">{expense.category || 'Other'}</span>
                           </td>
-                          <td>
-                            <div className="list-row list-row--compact" style={{ border: 'none', padding: 0 }}>
-                              <div className="avatar-chip" style={{ width: 24, height: 24, fontSize: '0.75rem' }}>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px]">
                                 {getInitials(expense.paidBy?.name)}
                               </div>
-                              <span>{expense.paidBy?.name}</span>
+                              <span className="text-sm font-semibold text-brand">{expense.paidBy?.name}</span>
                             </div>
                           </td>
-                          <td style={{ fontWeight: 600 }}>{formatCurrency(expense.amount)}</td>
-                          <td>
-                            <div className="split-pill-row">
+                          <td className="py-3 px-4 text-sm font-bold tabular-nums text-brand text-right">{formatCurrency(expense.amount)}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-wrap gap-1.5">
                               {expense.splits?.map((split) => (
-                                <span className="pill" key={getEntityId(split.user)} style={{ fontSize: '0.75rem' }}>
-                                  {getInitials(split.user?.name)}: {formatCurrency(split.amount)}
+                                <span className="fin-pill fin-pill-neutral bg-slate-50 text-[10px]" key={getEntityId(split.user)}>
+                                  {getInitials(split.user?.name)}: <span className="tabular-nums">{formatCurrency(split.amount)}</span>
                                 </span>
                               ))}
                             </div>
@@ -938,20 +961,20 @@ export default function GroupPage() {
                 </div>
 
                 {totalExpensePages > 1 && (
-                  <div className="button-row" style={{ justifyContent: 'center', marginTop: '1rem' }}>
+                  <div className="flex items-center justify-center gap-4 mt-4">
                     <button
-                      className="button button--ghost"
+                      className="btn btn-secondary px-3 py-1.5 text-xs"
                       disabled={expensePage === 1}
                       onClick={() => setExpensePage(p => p - 1)}
                       type="button"
                     >
                       Previous
                     </button>
-                    <span style={{ alignSelf: 'center', fontSize: '0.875rem' }}>
+                    <span className="text-sm font-medium text-slate-500">
                       Page {expensePage} of {totalExpensePages}
                     </span>
                     <button
-                      className="button button--ghost"
+                      className="btn btn-secondary px-3 py-1.5 text-xs"
                       disabled={expensePage === totalExpensePages}
                       onClick={() => setExpensePage(p => p + 1)}
                       type="button"
@@ -976,25 +999,27 @@ export default function GroupPage() {
           title="Past settlements"
         >
           {settlementHistory.length ? (
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
+            <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+              <table className="w-full text-left border-collapse min-w-[32rem]">
+                <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th>From</th>
-                    <th>To</th>
-                    <th>Method</th>
-                    <th>Amount</th>
-                    <th>When</th>
+                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">From</th>
+                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">To</th>
+                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Method</th>
+                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">When</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-200">
                   {settlementHistory.map((item) => (
-                    <tr key={getEntityId(item)}>
-                      <td>{item.from?.name}</td>
-                      <td>{item.to?.name}</td>
-                      <td>{item.method || 'cash'}</td>
-                      <td>{formatCurrency(item.amount)}</td>
-                      <td>{formatDate(item.createdAt)}</td>
+                    <tr className="hover:bg-slate-50 transition-fin" key={getEntityId(item)}>
+                      <td className="py-3 px-4 text-sm font-semibold text-brand">{item.from?.name}</td>
+                      <td className="py-3 px-4 text-sm font-semibold text-brand">{item.to?.name}</td>
+                      <td className="py-3 px-4">
+                        <span className="fin-pill fin-pill-neutral capitalize">{item.method || 'cash'}</span>
+                      </td>
+                      <td className="py-3 px-4 text-sm font-bold tabular-nums text-finance-positive text-right">{formatCurrency(item.amount)}</td>
+                      <td className="py-3 px-4 text-sm text-slate-500 text-right">{formatDate(item.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>

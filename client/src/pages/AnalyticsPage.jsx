@@ -125,67 +125,69 @@ export default function AnalyticsPage() {
 
   return (
     <>
-      <section className="page-hero">
+      <section className="flex flex-col md:flex-row gap-6 md:items-center justify-between fin-card bg-brand text-white border-none rounded-2xl shadow-fin-md mb-6">
         <div>
-          <Link className="inline-link" to={`/groups/${groupId}`}>
-            ← Back to group
+          <Link className="text-accent-light hover:text-white text-sm font-semibold mb-4 inline-block transition-fin" to={`/groups/${groupId}`}>
+            &larr; Back to group
           </Link>
-          <p className="hero-badge">AI Insights</p>
-          <h1>Analytics Dashboard</h1>
-          <p className="page-hero__lede">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="fin-pill bg-white/20 text-white border-white/30 text-[10px] uppercase tracking-wider">AI Insights</span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">Analytics Dashboard</h1>
+          <p className="text-sm text-slate-300 max-w-lg">
             Deep dive into your group's financial behavior, forecasting, and trends.
           </p>
         </div>
-        <div className="hero-panel hero-panel--compact">
-          <p className="hero-panel__eyebrow">Export</p>
-          <button className="button button--primary" onClick={handleExportCSV} disabled={downloading}>
+        <div className="bg-white/10 p-5 rounded-xl border border-white/20 backdrop-blur-md md:max-w-xs flex flex-col gap-3">
+          <p className="text-xs font-bold text-white tracking-widest uppercase m-0">Export</p>
+          <button className="btn bg-white text-brand hover:bg-slate-100 w-full" onClick={handleExportCSV} disabled={downloading}>
             {downloading ? 'Generating CSV...' : 'Download CSV'}
           </button>
         </div>
       </section>
 
-      <section className="stats-grid">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StatCard label="Total Spending" value={`₹${analytics.totalGroupSpending}`} />
         <StatCard label="Avg. Per Member" value={`₹${analytics.averagePerMember}`} />
-        <StatCard label="Next Month Forecast" value={`₹${analytics.forecastNextMonth || '0.00'}`} />
+        <StatCard label="Next Month Forecast" value={`₹${analytics.forecastNextMonth || '0.00'}`} tone="positive" />
       </section>
 
-      <div className="section-grid section-grid--wide">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SectionCard eyebrow="AI Analysis" subtitle="Personalized spending intelligence." title="Smart Insights">
-          <div className="stack">
+          <div className="flex flex-col gap-3">
             {analytics.smartInsights?.map((insight, idx) => (
-              <div key={idx} className="notice notice--success" style={{ backgroundColor: 'var(--color-surface-sunken)', borderLeft: '4px solid var(--color-primary)' }}>
+              <div key={idx} className="p-4 rounded-xl bg-slate-50 border-l-4 border-brand text-sm text-slate-700">
                 {/* Parse basic markdown bolding to strong tags */}
-                <span dangerouslySetInnerHTML={{ __html: insight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                <span dangerouslySetInnerHTML={{ __html: insight.replace(/\*\*(.*?)\*\*/g, '<strong class="text-brand">$1</strong>') }} />
               </div>
             ))}
-            <p className="helper-text">{analytics.forecastMessage}</p>
+            <p className="text-xs text-slate-500 italic mt-2">{analytics.forecastMessage}</p>
           </div>
         </SectionCard>
 
         {analytics.financialHub && (
           <SectionCard eyebrow="Social Graph" subtitle="The node with the highest debt/credit velocity." title="Financial Hub">
-            <div className="group-card">
-              <div className="group-card__header">
-                <h3>{analytics.financialHub.name}</h3>
-                <span className="pill pill--primary">Hub</span>
+            <div className="border border-slate-200 rounded-xl p-5 bg-white">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="text-lg font-bold text-brand m-0">{analytics.financialHub.name}</h3>
+                <span className="fin-pill fin-pill-neutral">Hub</span>
               </div>
-              <p>Total Velocity: ₹{analytics.financialHub.totalVelocity}</p>
-              <p>Connected Edges: {analytics.financialHub.degree}</p>
+              <p className="text-sm text-slate-600 mb-1">Total Velocity: <strong className="tabular-nums font-bold text-brand">₹{analytics.financialHub.totalVelocity}</strong></p>
+              <p className="text-sm text-slate-600">Connected Edges: <strong className="tabular-nums font-bold text-brand">{analytics.financialHub.degree}</strong></p>
             </div>
           </SectionCard>
         )}
       </div>
 
-      <div className="section-grid section-grid--wide">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <SectionCard title="Monthly Spending Trend">
-          <div style={{ height: '300px' }}>
+          <div className="h-[300px] w-full">
             <Bar data={trendData} options={{ responsive: true, maintainAspectRatio: false }} />
           </div>
         </SectionCard>
 
         <SectionCard title="Category Breakdown">
-          <div style={{ height: '300px', display: 'flex', justifyContent: 'center' }}>
+          <div className="h-[300px] w-full flex justify-center">
             {categoryLabels.length > 0 ? (
               <Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} />
             ) : (
@@ -195,23 +197,23 @@ export default function AnalyticsPage() {
         </SectionCard>
       </div>
 
-      <div className="section-grid section-grid--wide">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <SectionCard title="Group Ledger (Pairwise Balances)">
-          <div style={{ height: '300px' }}>
+          <div className="h-[300px] w-full">
             <Bar data={balanceData} options={{ responsive: true, maintainAspectRatio: false, indexAxis: 'y' }} />
           </div>
         </SectionCard>
 
         {memberAnalytics && (
           <SectionCard title="Contribution Leaderboard">
-             <div className="list-stack">
+             <div className="flex flex-col gap-3">
               {memberAnalytics.leaderboard.map((member, idx) => (
-                <article className="list-row" key={idx}>
-                  <div className="avatar-chip">{idx + 1}</div>
-                  <div className="list-row__content">
-                    <strong>{member.name}</strong>
+                <article className="flex items-center gap-4 p-4 border border-slate-200 rounded-xl bg-white hover:border-slate-300 transition-fin" key={idx}>
+                  <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm shrink-0">{idx + 1}</div>
+                  <div className="flex-1 overflow-hidden">
+                    <strong className="block text-sm text-brand truncate">{member.name}</strong>
                   </div>
-                  <span className="pill">₹{member.totalPaid}</span>
+                  <span className="fin-pill fin-pill-neutral tabular-nums">₹{member.totalPaid}</span>
                 </article>
               ))}
             </div>

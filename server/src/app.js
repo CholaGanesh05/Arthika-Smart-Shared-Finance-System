@@ -45,7 +45,7 @@ app.use(express.urlencoded({ extended: true }));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: 500, // increased for dev; lower for production
   message: {
     success: false,
     message: "Too many requests, try again later",

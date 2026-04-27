@@ -173,25 +173,23 @@ export default function Dashboard() {
 
   return (
     <>
-      <section className="page-hero">
-        <div>
-          <p className="hero-badge">Dashboard</p>
-          <h1>{user.name}, here’s the state of your shared money.</h1>
-          <p className="page-hero__lede">
-            This dashboard summarizes the live groups you belong to and how your
-            current balances shake out against each one.
+      <section className="flex flex-col md:flex-row gap-6 md:items-center justify-between fin-card bg-brand text-white border-none rounded-2xl shadow-fin-md mb-6">
+        <div className="flex-1">
+          <p className="text-xs font-bold text-accent-light tracking-widest uppercase mb-2">Dashboard</p>
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">{user.name}, here’s your money.</h1>
+          <p className="text-sm text-slate-300 max-w-lg">
+            This dashboard summarizes the live groups you belong to and how your current balances shake out against each one.
           </p>
         </div>
-        <div className="hero-panel hero-panel--compact">
-          <p className="hero-panel__eyebrow">Quick read</p>
-          <p>
-            Positive net means the group owes you. Negative net means you still
-            owe others.
+        <div className="bg-white/10 p-5 rounded-xl border border-white/20 backdrop-blur-md md:max-w-xs">
+          <p className="text-xs font-bold text-white tracking-widest uppercase mb-1">Quick read</p>
+          <p className="text-sm text-slate-200">
+            Positive net means the group owes you. Negative net means you still owe others.
           </p>
         </div>
       </section>
 
-      <section className="stats-grid">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           hint="How many active shared spaces you are part of."
           label="Groups"
@@ -216,19 +214,20 @@ export default function Dashboard() {
         />
       </section>
 
-      {notice ? <p className="notice notice--success">{notice}</p> : null}
-      {error ? <p className="notice notice--error">{error}</p> : null}
+      {notice ? <p className="fin-pill fin-pill-positive w-full justify-start text-sm px-4 py-3 mb-6">{notice}</p> : null}
+      {error ? <p className="fin-pill fin-pill-negative w-full justify-start text-sm px-4 py-3 mb-6">{error}</p> : null}
 
-      <div className="section-grid section-grid--wide">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SectionCard
           eyebrow="Group setup"
           subtitle="Optional member IDs can be pasted as comma-separated values because the current API expects raw user IDs."
           title="Create a new group"
         >
-          <form className="form-grid" onSubmit={handleCreateGroup}>
-            <label className="input-field">
-              <span>Group name</span>
+          <form className="flex flex-col gap-4" onSubmit={handleCreateGroup}>
+            <label className="block">
+              <span className="fin-label">Group name</span>
               <input
+                className="fin-input"
                 onChange={(event) =>
                   setCreateGroupForm((current) => ({
                     ...current,
@@ -241,9 +240,10 @@ export default function Dashboard() {
               />
             </label>
 
-            <label className="input-field">
-              <span>Description</span>
+            <label className="block">
+              <span className="fin-label">Description</span>
               <textarea
+                className="fin-input min-h-[5rem]"
                 onChange={(event) =>
                   setCreateGroupForm((current) => ({
                     ...current,
@@ -251,14 +251,15 @@ export default function Dashboard() {
                   }))
                 }
                 placeholder="Who this group is for and what money it tracks."
-                rows={4}
+                rows={2}
                 value={createGroupForm.description}
               />
             </label>
 
-            <label className="input-field">
-              <span>Optional member IDs</span>
+            <label className="block">
+              <span className="fin-label">Optional member IDs</span>
               <textarea
+                className="fin-input min-h-[5rem]"
                 onChange={(event) =>
                   setCreateGroupForm((current) => ({
                     ...current,
@@ -266,13 +267,13 @@ export default function Dashboard() {
                   }))
                 }
                 placeholder="Paste Mongo user IDs separated by commas or spaces."
-                rows={3}
+                rows={2}
                 value={createGroupForm.members}
               />
             </label>
 
-            <div className="button-row">
-              <button className="button button--primary" disabled={creatingGroup} type="submit">
+            <div className="flex justify-end mt-2">
+              <button className="btn btn-primary w-full sm:w-auto" disabled={creatingGroup} type="submit">
                 {creatingGroup ? 'Creating group...' : 'Create group'}
               </button>
             </div>
@@ -281,7 +282,7 @@ export default function Dashboard() {
 
         <SectionCard
           actions={
-            <button className="button button--ghost" onClick={() => void loadDashboard()} type="button">
+            <button className="btn btn-ghost text-xs px-3 py-1.5" onClick={() => void loadDashboard()} type="button">
               Refresh
             </button>
           }
@@ -290,27 +291,27 @@ export default function Dashboard() {
           title="Current groups"
         >
           {groupSummaries.length ? (
-            <div className="group-grid">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {groupSummaries.map((group) => (
-                <article className="group-card" key={group.id}>
-                  <div className="group-card__header">
+                <article className="border border-slate-200 rounded-2xl p-5 hover:shadow-fin-md transition-fin bg-slate-50/50 flex flex-col gap-4" key={group.id}>
+                  <div className="flex justify-between items-start gap-4">
                     <div>
-                      <p className="group-card__eyebrow">Created {formatDate(group.createdAt)}</p>
-                      <h3>{group.name}</h3>
+                      <p className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-1">Created {formatDate(group.createdAt)}</p>
+                      <h3 className="text-lg font-bold text-brand m-0 leading-tight">{group.name}</h3>
                     </div>
-                    <span className={`pill pill--${getNetTone(group.net)}`}>
+                    <span className={`fin-pill ${group.net > 0 ? 'fin-pill-positive' : group.net < 0 ? 'fin-pill-negative' : 'fin-pill-neutral'}`}>
                       {group.net > 0 ? 'You are owed' : group.net < 0 ? 'You owe' : 'Settled'}
                     </span>
                   </div>
 
-                  <p>{group.description || 'No description added yet.'}</p>
+                  <p className="text-sm text-slate-600 line-clamp-2 m-0 flex-1">{group.description || 'No description added yet.'}</p>
 
-                  <div className="group-card__meta">
-                    <span>{group.memberCount} members</span>
-                    <strong>{formatCurrency(Math.abs(group.net))}</strong>
+                  <div className="flex justify-between items-center pt-3 border-t border-slate-200/60">
+                    <span className="text-sm text-slate-500">{group.memberCount} members</span>
+                    <strong className="text-lg font-bold tabular-nums text-brand">{formatCurrency(Math.abs(group.net))}</strong>
                   </div>
 
-                  <Link className="button button--ghost" to={`/groups/${group.id}`}>
+                  <Link className="btn btn-secondary w-full" to={`/groups/${group.id}`}>
                     Open group
                   </Link>
                 </article>

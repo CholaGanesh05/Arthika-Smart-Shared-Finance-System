@@ -25,22 +25,22 @@ export function AppShell() {
   const location = useLocation()
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-lockup">
-          <span className="brand-lockup__badge">AR</span>
+    <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] min-h-screen bg-slate-50">
+      <aside className="sticky top-0 h-screen flex flex-col gap-6 p-6 border-r border-slate-200 bg-white shadow-fin-sm z-10 overflow-y-auto hidden md:flex">
+        <div className="flex items-center gap-4">
+          <span className="w-12 h-12 rounded-xl bg-brand text-white flex items-center justify-center font-display font-bold text-xl shadow-fin-sm">AR</span>
           <div>
-            <p className="brand-lockup__eyebrow">Smart shared finance</p>
-            <h1>Arthika</h1>
+            <p className="text-xs font-bold text-accent tracking-widest uppercase mb-0.5">Smart shared finance</p>
+            <h1 className="text-2xl font-display font-bold text-brand m-0">Arthika</h1>
           </div>
         </div>
 
-        <nav className="sidebar__nav" aria-label="Primary">
+        <nav className="flex flex-col gap-2 mt-4" aria-label="Primary">
           {navigation.map((item) => (
             <NavLink
               key={item.to}
               className={({ isActive }) =>
-                `sidebar__link${isActive ? ' sidebar__link--active' : ''}`
+                `px-4 py-3 rounded-xl font-semibold transition-fin flex items-center gap-3 ${isActive ? 'bg-accent/10 text-accent' : 'text-slate-600 hover:bg-slate-50 hover:text-brand'}`
               }
               to={item.to}
             >
@@ -49,31 +49,31 @@ export function AppShell() {
           ))}
         </nav>
 
-        <div className="sidebar__profile">
-          <div className="avatar-chip">{getInitials(user?.name)}</div>
-          <div>
-            <p className="sidebar__profile-label">Signed in as</p>
-            <strong>{user?.name}</strong>
-            <p>{user?.email}</p>
+        <div className="mt-auto p-4 border border-slate-200 rounded-2xl bg-slate-50 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm">{getInitials(user?.name)}</div>
+          <div className="overflow-hidden">
+            <p className="text-xs font-semibold text-slate-500 truncate">Signed in as</p>
+            <strong className="block text-sm text-brand truncate">{user?.name}</strong>
+            <p className="text-xs text-slate-500 truncate">{user?.email}</p>
           </div>
         </div>
 
-        <button className="button button--ghost" type="button" onClick={logout}>
+        <button className="btn btn-ghost w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700" type="button" onClick={logout}>
           Sign out
         </button>
       </aside>
 
-      <div className="app-shell__main">
-        <header className="topbar">
+      <div className="p-4 md:p-8 flex flex-col gap-8 w-full max-w-7xl mx-auto">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-6 border-b border-slate-200">
           <div>
-            <p className="topbar__eyebrow">Live workspace</p>
-            <h2>{getHeading(location.pathname)}</h2>
+            <p className="text-xs font-bold text-accent tracking-widest uppercase mb-1">Live workspace</p>
+            <h2 className="text-3xl font-display font-bold text-brand m-0">{getHeading(location.pathname)}</h2>
           </div>
-          <p className="topbar__hint">
+          <p className="text-sm text-slate-500 max-w-md text-left md:text-right">
             Built from the current API and the Arthika SRS.
           </p>
         </header>
-        <main className="page-stack">
+        <main className="flex flex-col gap-6">
           <Outlet />
         </main>
       </div>

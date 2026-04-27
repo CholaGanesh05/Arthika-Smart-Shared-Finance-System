@@ -98,45 +98,47 @@ export default function SettingsPage() {
 
   return (
     <>
-      <section className="page-hero">
+      <section className="flex flex-col md:flex-row gap-6 md:items-center justify-between fin-card bg-brand text-white border-none rounded-2xl shadow-fin-md mb-6">
         <div>
-          <Link className="inline-link" to={isGroupSettings ? `/groups/${groupId}` : '/dashboard'}>
-            ← Back to {isGroupSettings ? 'group' : 'dashboard'}
+          <Link className="text-accent-light hover:text-white text-sm font-semibold mb-4 inline-block transition-fin" to={isGroupSettings ? `/groups/${groupId}` : '/dashboard'}>
+            &larr; Back to {isGroupSettings ? 'group' : 'dashboard'}
           </Link>
-          <h1>Settings</h1>
-          <p className="page-hero__lede">
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">Settings</h1>
+          <p className="text-sm text-slate-300 max-w-lg">
             Manage your {isGroupSettings ? 'group configuration' : 'personal profile'} and security.
           </p>
         </div>
       </section>
 
       {!isGroupSettings && (
-        <div className="section-grid section-grid--wide">
+        <div className="grid grid-cols-1 max-w-2xl">
           <SectionCard eyebrow="Security" title="Change Password">
-            {pwdNotice && <p className="notice notice--success">{pwdNotice}</p>}
-            {pwdError && <p className="notice notice--error">{pwdError}</p>}
+            {pwdNotice && <p className="fin-pill fin-pill-positive w-full justify-start text-sm px-4 py-3 mb-2">{pwdNotice}</p>}
+            {pwdError && <p className="fin-pill fin-pill-negative w-full justify-start text-sm px-4 py-3 mb-2">{pwdError}</p>}
             
-            <form className="form-grid" onSubmit={handlePasswordSubmit}>
-              <label className="input-field">
-                <span>Current Password</span>
+            <form className="flex flex-col gap-4 mt-2" onSubmit={handlePasswordSubmit}>
+              <label className="block">
+                <span className="fin-label">Current Password</span>
                 <input
+                  className="fin-input"
                   type="password"
                   required
                   value={pwdForm.currentPassword}
                   onChange={(e) => setPwdForm({ ...pwdForm, currentPassword: e.target.value })}
                 />
               </label>
-              <label className="input-field">
-                <span>New Password</span>
+              <label className="block">
+                <span className="fin-label">New Password</span>
                 <input
+                  className="fin-input"
                   type="password"
                   required
                   value={pwdForm.newPassword}
                   onChange={(e) => setPwdForm({ ...pwdForm, newPassword: e.target.value })}
                 />
               </label>
-              <div className="button-row">
-                <button className="button button--primary" disabled={pwdSubmitting} type="submit">
+              <div className="flex justify-end mt-2">
+                <button className="btn btn-primary w-full sm:w-auto" disabled={pwdSubmitting} type="submit">
                   {pwdSubmitting ? 'Updating...' : 'Update Password'}
                 </button>
               </div>
@@ -146,19 +148,17 @@ export default function SettingsPage() {
       )}
 
       {isGroupSettings && group && (
-        <div className="section-grid section-grid--wide">
+        <div className="grid grid-cols-1 max-w-2xl">
           <SectionCard eyebrow="Group Management" subtitle="Only group owners can perform these actions." title="Danger Zone">
-            {groupError && <p className="notice notice--error">{groupError}</p>}
+            {groupError && <p className="fin-pill fin-pill-negative w-full justify-start text-sm px-4 py-3 mb-2">{groupError}</p>}
             
             {currentRole === 'owner' ? (
-              <div className="stack">
-                <div className="group-card" style={{ borderColor: 'var(--color-border-hover)' }}>
-                  <div className="group-card__header">
-                    <h3>Archive Group</h3>
-                  </div>
-                  <p>Archiving the group prevents any new expenses or settlements from being added. The group remains visible for historical reference.</p>
+              <div className="flex flex-col gap-4 mt-2">
+                <div className="border border-slate-200 rounded-xl p-5 hover:border-slate-300 transition-fin bg-white flex flex-col gap-3">
+                  <h3 className="text-lg font-bold text-brand m-0">Archive Group</h3>
+                  <p className="text-sm text-slate-600 m-0">Archiving the group prevents any new expenses or settlements from being added. The group remains visible for historical reference.</p>
                   <button 
-                    className="button button--ghost" 
+                    className="btn btn-secondary self-start mt-2" 
                     disabled={groupActioning}
                     onClick={handleArchiveGroup}
                   >
@@ -166,14 +166,11 @@ export default function SettingsPage() {
                   </button>
                 </div>
 
-                <div className="group-card" style={{ borderColor: 'rgba(239, 68, 68, 0.4)' }}>
-                  <div className="group-card__header">
-                    <h3 style={{ color: 'var(--color-negative)' }}>Delete Group</h3>
-                  </div>
-                  <p>Permanently delete this group and all its data. This action is irreversible. The system will reject deletion if there are any unsettled balances.</p>
+                <div className="border border-red-200 bg-red-50/50 rounded-xl p-5 transition-fin flex flex-col gap-3">
+                  <h3 className="text-lg font-bold text-red-700 m-0">Delete Group</h3>
+                  <p className="text-sm text-red-800/80 m-0">Permanently delete this group and all its data. This action is irreversible. The system will reject deletion if there are any unsettled balances.</p>
                   <button 
-                    className="button" 
-                    style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--color-negative)', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                    className="btn bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 self-start mt-2" 
                     disabled={groupActioning}
                     onClick={handleDeleteGroup}
                   >

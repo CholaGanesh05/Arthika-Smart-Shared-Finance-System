@@ -1,3 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* ── Fintech inputs ─────────────────────────────────────── */
+  .fin-input {
+    @apply w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-900
+           text-sm font-medium outline-none
+           focus:border-brand focus:ring-2 focus:ring-brand/20
+           transition-all duration-200 ease-in-out
+           placeholder:text-slate-400;
+  }
+  .fin-label {
+    @apply block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5;
+  }
+
+  /* ── Buttons ────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5
+           text-sm font-semibold cursor-pointer border
+           transition-all duration-200 ease-in-out
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-brand text-white border-brand
+           hover:bg-brand-deep hover:-translate-y-0.5 hover:shadow-fin-md
+           active:translate-y-0;
+  }
+  .btn-secondary {
+    @apply bg-slate-100 text-slate-700 border-slate-200
+           hover:bg-slate-200 hover:-translate-y-0.5
+           active:translate-y-0;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-slate-600 border-slate-200
+           hover:bg-slate-100 hover:border-slate-300;
+  }
+
+  /* ── Cards ──────────────────────────────────────────────── */
+  .fin-card {
+    @apply bg-white rounded-2xl border border-slate-200 p-6 shadow-fin-sm;
+  }
+
+  /* ── Pills ──────────────────────────────────────────────── */
+  .fin-pill {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border;
+  }
+  .fin-pill-neutral {
+    @apply bg-slate-100 text-slate-600 border-slate-200;
+  }
+  .fin-pill-positive {
+    @apply bg-emerald-50 text-emerald-700 border-emerald-200;
+  }
+  .fin-pill-negative {
+    @apply bg-red-50 text-red-700 border-red-200;
+  }
+
+  /* ── Transitions ────────────────────────────────────────── */
+  .transition-fin {
+    @apply transition-all duration-200 ease-in-out;
+  }
+}
+
 :root {
   --bg: #f5ecdf;
   --bg-strong: #fff9f0;
@@ -789,6 +853,7 @@ h3 {
 }
 
 @media (max-width: 1100px) {
+
   .stats-grid,
   .feature-grid,
   .section-grid,
@@ -831,6 +896,7 @@ h3 {
 }
 
 @media (max-width: 720px) {
+
   .marketing-shell,
   .auth-layout {
     width: min(100%, calc(100% - 1rem));

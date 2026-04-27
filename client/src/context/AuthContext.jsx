@@ -62,7 +62,7 @@ export function AuthProvider({ children }) {
 
       try {
         const payload = await api.getMe(token, controller.signal)
-        const nextUser = normalizeUser(payload?.user)
+        const nextUser = normalizeUser(payload?.data)
 
         startTransition(() => {
           setUser(nextUser)
