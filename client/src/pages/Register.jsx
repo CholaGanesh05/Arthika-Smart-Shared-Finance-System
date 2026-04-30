@@ -1,9 +1,29 @@
 import { useState } from 'react'
+import { Eye, EyeOff, IndianRupee, Loader2, Lock, Mail, Sparkles, User } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-function getPasswordMessage(password) {
-  if (password.length < 8) return 'Password must be at least 8 characters.'
+function getPasswordStrength(password) {
+  if (!password) return { score: 0, label: '', color: '' }
+  let score = 0
+  if (password.length >= 8) score++
+  if (/[A-Z]/.test(password)) score++
+  if (/[a-z]/.test(password)) score++
+  if (/\d/.test(password)) score++
+  if (/[^A-Za-z0-9]/.test(password)) score++
+  const map = {
+    0: { label: '', color: 'transparent' },
+    1: { label: 'Very weak', color: '#dc2626' },
+    2: { label: 'Weak', color: '#f97316' },
+    3: { label: 'Fair', color: '#d97706' },
+    4: { label: 'Strong', color: '#059669' },
+    5: { label: 'Very strong', color: '#10b981' },
+  }
+  return { score, ...map[score] }
+}
+
+function getPasswordError(password) {
+  if (password.length < 8) return 'At least 8 characters required.'
   if (!/[A-Z]/.test(password)) return 'Add at least one uppercase letter.'
   if (!/[a-z]/.test(password)) return 'Add at least one lowercase letter.'
   if (!/\d/.test(password)) return 'Add at least one number.'
@@ -14,177 +34,196 @@ export default function Register() {
   const { register } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
-  const [error, setError] = useState('')
+  const [errors, setErrors] = useState({})
+  const [serverError, setServerError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
 
-  const passwordHint = form.password ? getPasswordMessage(form.password) : ''
+  const strength = getPasswordStrength(form.password)
+
+  function validate() {
+    const next = {}
+    if (!form.name.trim()) next.name = 'Name is required.'
+    if (!form.email) next.email = 'Email is required.'
+    else if (!/\S+@\S+\.\S+/.test(form.email)) next.email = 'Enter a valid email.'
+    const pwdErr = getPasswordError(form.password)
+    if (pwdErr) next.password = pwdErr
+    if (!form.confirmPassword) next.confirmPassword = 'Please confirm your password.'
+    else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.'
+    setErrors(next)
+    return Object.keys(next).length === 0
+  }
 
   async function handleSubmit(event) {
     event.preventDefault()
-    if (passwordHint) { setError(passwordHint); return }
-    if (form.password !== form.confirmPassword) { setError('Password confirmation does not match.'); return }
+    if (!validate()) return
     setSubmitting(true)
-    setError('')
+    setServerError('')
     try {
       await register({ name: form.name.trim(), email: form.email.trim(), password: form.password })
       navigate('/dashboard', { replace: true })
     } catch (submitError) {
-      setError(submitError.message)
+      setServerError(submitError.message)
     } finally {
       setSubmitting(false)
     }
   }
 
+  function field(key, value) {
+    setForm((c) => ({ ...c, [key]: value }))
+    if (errors[key]) setErrors((c) => ({ ...c, [key]: '' }))
+  }
+
+  const inputStyle = (key) => ({
+    borderColor: errors[key] ? 'var(--danger)' : undefined,
+  })
+
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Left brand panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-brand flex-col justify-between p-12 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-72 h-72 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-        </div>
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center font-bold text-white text-lg">₹</div>
-            <span className="text-white font-bold text-xl tracking-tight">Arthika</span>
+    <div style={{
+      minHeight: '100vh', display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      background: 'var(--bg-base)',
+    }} className="auth-full-grid">
+      {/* Left decorative panel */}
+      <div style={{
+        background: 'var(--grad-primary)',
+        display: 'flex', flexDirection: 'column',
+        justifyContent: 'center', alignItems: 'center',
+        padding: '3rem 2rem', position: 'relative', overflow: 'hidden',
+      }} className="auth-left-panel">
+        <div style={{ position: 'absolute', top: -100, right: -100, width: 400, height: 400, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ position: 'absolute', bottom: -80, left: -60, width: 320, height: 320, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
+        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', color: '#fff', maxWidth: 360 }}>
+          <div style={{ background: '#fff', padding: '1.25rem 2rem', borderRadius: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
+            <img src="/logo.png" alt="Arthika" style={{ height: '44px', width: 'auto', display: 'block' }} />
           </div>
-        </div>
-        <div className="relative z-10 flex-1 flex flex-col justify-center">
-          <span className="inline-block bg-white/20 text-white text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full mb-6 w-fit">
-            Create your account
-          </span>
-          <h1 className="text-4xl font-display font-bold text-white leading-snug mb-6">
-            Start the version of shared finance that feels more organized than awkward.
-          </h1>
-          <p className="text-slate-300 text-base leading-relaxed max-w-sm">
-            Register once, then create groups for trips, apartments, events, and other shared budgets.
+          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: '2.8rem', fontWeight: 800, marginBottom: '1rem', lineHeight: 1.15 }}>Join Arthika</h1>
+          <p style={{ fontSize: '1rem', opacity: 0.85, lineHeight: 1.7, marginBottom: '2rem' }}>
+            Create your account and start managing shared expenses with your crew.
           </p>
-        </div>
-        <div className="relative z-10 flex gap-6 pt-8 border-t border-white/20">
-          <div>
-            <p className="text-2xl font-bold text-white">Free</p>
-            <p className="text-slate-400 text-xs mt-1">No hidden fees</p>
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            {['Create groups for any occasion', 'Custom or equal splits', 'Shared fund pools & kitties', 'Full analytics dashboard'].map((item) => (
+              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.95rem', opacity: 0.9 }}>
+                <Sparkles size={14} color="rgba(255,255,255,0.8)" />
+                {item}
+              </div>
+            ))}
           </div>
-          <div>
-            <p className="text-2xl font-bold text-white">Instant</p>
-            <p className="text-slate-400 text-xs mt-1">Setup in seconds</p>
+          <div style={{ marginTop: '2.5rem', borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+            <img src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=500&q=75" alt="Friends sharing expenses" style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />
           </div>
         </div>
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-slate-50 min-h-screen lg:min-h-0">
-        <div className="w-full max-w-md">
-          {/* Mobile logo */}
-          <div className="flex items-center gap-3 mb-10 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center font-bold text-white text-lg">₹</div>
-            <span className="text-brand font-bold text-xl tracking-tight">Arthika</span>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '2rem 1.5rem', background: 'var(--bg-surface)', overflowY: 'auto',
+      }}>
+        <div style={{ width: '100%', maxWidth: 420 }}>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: '0', marginBottom: '2rem', borderBottom: '2px solid var(--hairline)' }}>
+            <Link to="/login" style={{
+              padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 600,
+              color: 'var(--text-muted)', transition: 'all 150ms',
+            }}>Sign in</Link>
+            <Link to="/register" style={{
+              padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 700,
+              color: 'var(--primary)', borderBottom: '2px solid var(--primary)',
+              marginBottom: '-2px', transition: 'all 150ms',
+            }}>Create account</Link>
           </div>
 
-          <div className="mb-8">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Registration</p>
-            <h2 className="text-3xl font-display font-bold text-slate-900 mb-1">Join Arthika</h2>
-            <p className="text-slate-500 text-sm">You&apos;ll be signed in immediately after registration.</p>
-          </div>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>Get started free</h2>
+          <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '1.75rem' }}>No credit card. No hidden fees. Just shared finance done right.</p>
 
-          <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
-            <label className="block">
-              <span className="fin-label">Full name</span>
-              <input
-                autoComplete="name"
-                className="fin-input"
-                name="name"
-                onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
-                placeholder="Chola Chetan"
-                required
-                value={form.name}
-              />
-            </label>
+          {serverError && (
+            <div style={{
+              background: 'rgba(220, 38, 38, 0.08)', border: '1px solid rgba(220, 38, 38, 0.2)',
+              borderLeft: '3px solid var(--danger)', borderRadius: 10, padding: '0.85rem 1rem',
+              marginBottom: '1.25rem', fontSize: '0.875rem', color: 'var(--danger)',
+            }}>
+              {serverError}
+            </div>
+          )}
 
-            <label className="block">
-              <span className="fin-label">Email address</span>
-              <input
-                autoComplete="email"
-                className="fin-input"
-                name="email"
-                onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))}
-                placeholder="you@example.com"
-                required
-                type="email"
-                value={form.email}
-              />
-            </label>
-
-            <label className="block">
-              <span className="fin-label">Password</span>
-              <input
-                autoComplete="new-password"
-                className="fin-input"
-                name="password"
-                onChange={(e) => setForm((c) => ({ ...c, password: e.target.value }))}
-                placeholder="Use a strong password"
-                required
-                type="password"
-                value={form.password}
-              />
-            </label>
-
-            <label className="block">
-              <span className="fin-label">Confirm password</span>
-              <input
-                autoComplete="new-password"
-                className="fin-input"
-                name="confirmPassword"
-                onChange={(e) => setForm((c) => ({ ...c, confirmPassword: e.target.value }))}
-                placeholder="Repeat your password"
-                required
-                type="password"
-                value={form.confirmPassword}
-              />
-            </label>
-
-            {passwordHint && (
-              <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                <p className="text-sm text-amber-700 font-medium">{passwordHint}</p>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Name */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em' }}>Full name</label>
+              <div style={{ position: 'relative' }}>
+                <User style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)' }} size={16} color="var(--primary)" strokeWidth={1.8} />
+                <input autoComplete="name" className="fin-input with-left-icon" name="name" onChange={(e) => field('name', e.target.value)} placeholder="Your name" style={inputStyle('name')} type="text" value={form.name} />
               </div>
-            )}
-            {error && (
-              <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                <svg className="w-4 h-4 text-red-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                <p className="text-sm text-red-700 font-medium">{error}</p>
-              </div>
-            )}
+              {errors.name && <p style={{ fontSize: '0.76rem', color: 'var(--danger)', marginTop: '0.25rem' }}>{errors.name}</p>}
+            </div>
 
-            <button
-              className="btn btn-primary w-full py-3 text-base mt-1"
-              disabled={submitting}
-              type="submit"
-            >
-              {submitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Creating account...
-                </span>
-              ) : 'Create account'}
+            {/* Email */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em' }}>Email address</label>
+              <div style={{ position: 'relative' }}>
+                <Mail style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)' }} size={16} color="var(--primary)" strokeWidth={1.8} />
+                <input autoComplete="email" className="fin-input with-left-icon" name="email" onChange={(e) => field('email', e.target.value)} placeholder="you@example.com" style={inputStyle('email')} type="email" value={form.email} />
+              </div>
+              {errors.email && <p style={{ fontSize: '0.76rem', color: 'var(--danger)', marginTop: '0.25rem' }}>{errors.email}</p>}
+            </div>
+
+            {/* Password */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em' }}>Password</label>
+              <div style={{ position: 'relative' }}>
+                <Lock style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)' }} size={16} color="var(--primary)" strokeWidth={1.8} />
+                <input autoComplete="new-password" className="fin-input with-left-icon with-right-icon" name="password" onChange={(e) => field('password', e.target.value)} placeholder="Use a strong password" style={inputStyle('password')} type={showPassword ? 'text' : 'password'} value={form.password} />
+                <button aria-label="Toggle password" onClick={() => setShowPassword((c) => !c)} style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-muted)' }} type="button">
+                  {showPassword ? <EyeOff size={16} strokeWidth={1.8} /> : <Eye size={16} strokeWidth={1.8} />}
+                </button>
+              </div>
+              {form.password && (
+                <div style={{ marginTop: '0.4rem' }}>
+                  <div style={{ display: 'flex', gap: '3px', marginBottom: '0.25rem' }}>
+                    {[1,2,3,4,5].map((i) => (
+                      <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= strength.score ? strength.color : 'var(--hairline)', transition: 'background 300ms' }} />
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '0.73rem', color: strength.color, fontWeight: 600 }}>{strength.label}</p>
+                </div>
+              )}
+              {errors.password && <p style={{ fontSize: '0.76rem', color: 'var(--danger)', marginTop: '0.25rem' }}>{errors.password}</p>}
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em' }}>Confirm password</label>
+              <div style={{ position: 'relative' }}>
+                <Lock style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)' }} size={16} color="var(--primary)" strokeWidth={1.8} />
+                <input autoComplete="new-password" className="fin-input with-left-icon with-right-icon" name="confirmPassword" onChange={(e) => field('confirmPassword', e.target.value)} placeholder="Repeat your password" style={inputStyle('confirmPassword')} type={showConfirm ? 'text' : 'password'} value={form.confirmPassword} />
+                <button aria-label="Toggle confirm password" onClick={() => setShowConfirm((c) => !c)} style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-muted)' }} type="button">
+                  {showConfirm ? <EyeOff size={16} strokeWidth={1.8} /> : <Eye size={16} strokeWidth={1.8} />}
+                </button>
+              </div>
+              {errors.confirmPassword && <p style={{ fontSize: '0.76rem', color: 'var(--danger)', marginTop: '0.25rem' }}>{errors.confirmPassword}</p>}
+            </div>
+
+            <button className="btn btn-primary" disabled={submitting} style={{ width: '100%', marginTop: '0.5rem', fontSize: '1.05rem', padding: '0.85rem' }} type="submit">
+              {submitting ? <Loader2 className="animate-spin" size={18} strokeWidth={1.8} /> : <IndianRupee size={18} strokeWidth={1.8} />}
+              {submitting ? 'Creating account...' : 'Create account'}
             </button>
-
-            <p className="text-center text-sm text-slate-500 mt-2">
-              Already have an account?{' '}
-              <Link className="text-brand font-semibold hover:underline" to="/login">
-                Sign in
-              </Link>
-            </p>
           </form>
+
+          <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
+            Already have an account?{' '}
+            <Link to="/login" style={{ color: 'var(--primary)', fontWeight: 700 }}>Sign in</Link>
+          </p>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .auth-full-grid { grid-template-columns: 1fr !important; }
+          .auth-left-panel { display: none !important; }
+        }
+      `}</style>
     </div>
   )
 }

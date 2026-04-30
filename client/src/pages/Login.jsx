@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Eye, EyeOff, IndianRupee, Loader2, Lock, Mail, Sparkles } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -7,149 +8,177 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
-  const [error, setError] = useState('')
+  const [errors, setErrors] = useState({})
+  const [serverError, setServerError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const destination = location.state?.from?.pathname || '/dashboard'
 
+  function validate() {
+    const next = {}
+    if (!form.email) next.email = 'Email is required.'
+    else if (!/\S+@\S+\.\S+/.test(form.email)) next.email = 'Enter a valid email address.'
+    if (!form.password) next.password = 'Password is required.'
+    else if (form.password.length < 8) next.password = 'Password must be at least 8 characters.'
+    setErrors(next)
+    return Object.keys(next).length === 0
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
+    if (!validate()) return
     setSubmitting(true)
-    setError('')
+    setServerError('')
     try {
       await login(form)
       navigate(destination, { replace: true })
     } catch (submitError) {
-      setError(submitError.message)
+      setServerError(submitError.message)
     } finally {
       setSubmitting(false)
     }
   }
 
+  function field(key, value) {
+    setForm((c) => ({ ...c, [key]: value }))
+    if (errors[key]) setErrors((c) => ({ ...c, [key]: '' }))
+  }
+
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Left brand panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-brand flex-col justify-between p-12 relative overflow-hidden">
-        {/* Background decoration */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-72 h-72 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-        </div>
-
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center font-bold text-white text-lg">₹</div>
-            <span className="text-white font-bold text-xl tracking-tight">Arthika</span>
+    <div style={{
+      minHeight: '100vh', display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      background: 'var(--bg-base)',
+    }} className="auth-full-grid">
+      {/* Left decorative panel */}
+      <div style={{
+        background: 'var(--grad-primary)',
+        display: 'flex', flexDirection: 'column',
+        justifyContent: 'center', alignItems: 'center',
+        padding: '3rem 2rem', position: 'relative', overflow: 'hidden',
+      }} className="auth-left-panel">
+        <div style={{ position: 'absolute', top: -100, right: -100, width: 400, height: 400, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ position: 'absolute', bottom: -80, left: -60, width: 320, height: 320, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
+        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', color: '#fff', maxWidth: 360 }}>
+          <div style={{ background: '#fff', padding: '1.25rem 2rem', borderRadius: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
+            <img src="/logo.png" alt="Arthika" style={{ height: '44px', width: 'auto', display: 'block' }} />
           </div>
-        </div>
-
-        <div className="relative z-10 flex-1 flex flex-col justify-center">
-          <span className="inline-block bg-white/20 text-white text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full mb-6 w-fit">
-            Welcome back
-          </span>
-          <h1 className="text-4xl font-display font-bold text-white leading-snug mb-6">
-            Step back into your group finances without losing the thread.
-          </h1>
-          <p className="text-slate-300 text-base leading-relaxed max-w-sm">
-            Sign in to review balances, log new expenses, and settle what is still outstanding across your shared groups.
+          <p style={{ fontSize: '1.05rem', opacity: 0.85, lineHeight: 1.7, marginBottom: '2rem' }}>
+            Smart shared finance for groups. Split bills, track balances, and settle debts — all in one place.
           </p>
-        </div>
-
-        <div className="relative z-10 flex gap-6 pt-8 border-t border-white/20">
-          <div>
-            <p className="text-2xl font-bold text-white tabular-nums">₹0</p>
-            <p className="text-slate-400 text-xs mt-1">Lost to confusion</p>
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            {['Equal or custom expense splits', 'Real-time balance updates', 'Minimal settlement plans', 'INR-native experience'].map((item) => (
+              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.95rem', opacity: 0.9 }}>
+                <Sparkles size={14} color="rgba(255,255,255,0.8)" />
+                {item}
+              </div>
+            ))}
           </div>
-          <div>
-            <p className="text-2xl font-bold text-white tabular-nums">100%</p>
-            <p className="text-slate-400 text-xs mt-1">Transparent splits</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-white tabular-nums">∞</p>
-            <p className="text-slate-400 text-xs mt-1">Groups supported</p>
+          <div style={{ marginTop: '2.5rem', borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+            <img src="https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?w=500&q=75" alt="Finance team" style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />
           </div>
         </div>
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-slate-50 min-h-screen lg:min-h-0">
-        <div className="w-full max-w-md">
-          {/* Mobile logo */}
-          <div className="flex items-center gap-3 mb-10 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center font-bold text-white text-lg">₹</div>
-            <span className="text-brand font-bold text-xl tracking-tight">Arthika</span>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '2rem 1.5rem', background: 'var(--bg-surface)',
+      }}>
+        <div style={{ width: '100%', maxWidth: 420 }}>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: '0', marginBottom: '2rem', borderBottom: '2px solid var(--hairline)' }}>
+            <Link to="/login" style={{
+              padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 700,
+              color: 'var(--primary)', borderBottom: '2px solid var(--primary)',
+              marginBottom: '-2px', transition: 'all 150ms',
+            }}>Sign in</Link>
+            <Link to="/register" style={{
+              padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 600,
+              color: 'var(--text-muted)', transition: 'all 150ms',
+            }}>Create account</Link>
           </div>
 
-          <div className="mb-8">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Authentication</p>
-            <h2 className="text-3xl font-display font-bold text-slate-900 mb-1">Sign in to Arthika</h2>
-            <p className="text-slate-500 text-sm">Use the account you created to get started.</p>
-          </div>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>Welcome back</h2>
+          <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '1.75rem' }}>Sign in to your Arthika workspace.</p>
 
-          <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
-            <label className="block">
-              <span className="fin-label">Email address</span>
-              <input
-                autoComplete="email"
-                className="fin-input"
-                name="email"
-                onChange={(event) => setForm((c) => ({ ...c, email: event.target.value }))}
-                placeholder="you@example.com"
-                required
-                type="email"
-                value={form.email}
-              />
-            </label>
+          {serverError && (
+            <div style={{
+              background: 'rgba(220, 38, 38, 0.08)',
+              border: '1px solid rgba(220, 38, 38, 0.2)',
+              borderLeft: '3px solid var(--danger)',
+              borderRadius: 10, padding: '0.85rem 1rem',
+              marginBottom: '1.25rem', fontSize: '0.875rem', color: 'var(--danger)',
+            }}>
+              {serverError}
+            </div>
+          )}
 
-            <label className="block">
-              <span className="fin-label">Password</span>
-              <input
-                autoComplete="current-password"
-                className="fin-input"
-                minLength={8}
-                name="password"
-                onChange={(event) => setForm((c) => ({ ...c, password: event.target.value }))}
-                placeholder="At least 8 characters"
-                required
-                type="password"
-                value={form.password}
-              />
-            </label>
-
-            {error && (
-              <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                <svg className="w-4 h-4 text-red-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                <p className="text-sm text-red-700 font-medium">{error}</p>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.45rem', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em' }}>Email address</label>
+              <div style={{ position: 'relative' }}>
+                <Mail style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)' }} size={16} color="var(--primary)" strokeWidth={1.8} />
+                <input
+                  autoComplete="email"
+                  className="fin-input with-left-icon"
+                  name="email"
+                  onChange={(e) => field('email', e.target.value)}
+                  placeholder="you@example.com"
+                  style={{ borderColor: errors.email ? 'var(--danger)' : undefined }}
+                  type="email"
+                  value={form.email}
+                />
               </div>
-            )}
+              {errors.email && <p style={{ fontSize: '0.78rem', color: 'var(--danger)', marginTop: '0.3rem' }}>{errors.email}</p>}
+            </div>
 
-            <button
-              className="btn btn-primary w-full py-3 text-base mt-1"
-              disabled={submitting}
-              type="submit"
-            >
-              {submitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Signing in...
-                </span>
-              ) : 'Sign in'}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.45rem', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em' }}>Password</label>
+              <div style={{ position: 'relative' }}>
+                <Lock style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)' }} size={16} color="var(--primary)" strokeWidth={1.8} />
+                <input
+                  autoComplete="current-password"
+                  className="fin-input with-left-icon with-right-icon"
+                  name="password"
+                  onChange={(e) => field('password', e.target.value)}
+                  placeholder="Your password"
+                  style={{ borderColor: errors.password ? 'var(--danger)' : undefined }}
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                />
+                <button
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword((c) => !c)}
+                  style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-muted)' }}
+                  type="button"
+                >
+                  {showPassword ? <EyeOff size={16} strokeWidth={1.8} /> : <Eye size={16} strokeWidth={1.8} />}
+                </button>
+              </div>
+              {errors.password && <p style={{ fontSize: '0.78rem', color: 'var(--danger)', marginTop: '0.3rem' }}>{errors.password}</p>}
+            </div>
+
+            <button className="btn btn-primary" disabled={submitting} style={{ width: '100%', marginTop: '0.5rem', fontSize: '1.05rem', padding: '0.85rem' }} type="submit">
+              {submitting ? <Loader2 className="animate-spin" size={18} strokeWidth={1.8} /> : <IndianRupee size={18} strokeWidth={1.8} />}
+              {submitting ? 'Signing in...' : 'Sign in'}
             </button>
-
-            <p className="text-center text-sm text-slate-500 mt-2">
-              Don&apos;t have an account?{' '}
-              <Link className="text-brand font-semibold hover:underline" to="/register">
-                Create one
-              </Link>
-            </p>
           </form>
+
+          <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
+            Don't have an account?{' '}
+            <Link to="/register" style={{ color: 'var(--primary)', fontWeight: 700 }}>Create one free</Link>
+          </p>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .auth-full-grid { grid-template-columns: 1fr !important; }
+          .auth-left-panel { display: none !important; }
+        }
+      `}</style>
     </div>
   )
 }

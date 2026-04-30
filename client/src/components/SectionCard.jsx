@@ -3,20 +3,51 @@ export function SectionCard({
   subtitle,
   eyebrow,
   actions,
+  icon: Icon,
   className = '',
   children,
 }) {
   return (
-    <section className={`fin-card flex flex-col gap-6 ${className}`.trim()}>
-      <header className="flex justify-between items-start gap-4">
-        <div>
-          {eyebrow ? <p className="text-xs font-bold text-accent tracking-widest uppercase mb-1">{eyebrow}</p> : null}
-          <h2 className="text-2xl font-display font-bold text-brand m-0">{title}</h2>
-          {subtitle ? <p className="text-sm text-slate-500 mt-1.5">{subtitle}</p> : null}
-        </div>
-        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
-      </header>
-      <div className="flex flex-col gap-4">{children}</div>
+    <section className={`fin-card ${className}`.trim()} style={{ padding: '1.5rem 1.75rem' }}>
+      <div className="fin-card-inner" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <header style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.875rem', flex: 1, minWidth: 0 }}>
+              {Icon && (
+                <div style={{
+                  width: 42, height: 42, borderRadius: 12, flexShrink: 0,
+                  background: 'var(--primary-glow)',
+                  display: 'grid', placeItems: 'center',
+                }}>
+                  <Icon color="var(--primary)" size={20} strokeWidth={1.8} />
+                </div>
+              )}
+              <div style={{ minWidth: 0 }}>
+                {eyebrow && (
+                  <p style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '0.68rem', fontWeight: 500,
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    color: 'var(--primary)', marginBottom: '0.3rem',
+                  }}>{eyebrow}</p>
+                )}
+                <h2 style={{
+                  fontFamily: "'Playfair Display', serif",
+                  fontSize: '1.35rem', fontWeight: 700,
+                  color: 'var(--text-primary)', lineHeight: 1.25,
+                }}>{title}</h2>
+                {subtitle && (
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.3rem', lineHeight: 1.6 }}>{subtitle}</p>
+                )}
+              </div>
+            </div>
+            {actions && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>{actions}</div>
+            )}
+          </div>
+        </header>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>{children}</div>
+      </div>
     </section>
   )
 }

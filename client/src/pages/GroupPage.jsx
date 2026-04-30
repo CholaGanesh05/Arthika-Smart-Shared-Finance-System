@@ -1,4 +1,37 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  AlertCircle,
+  ArrowDownLeft,
+  ArrowRight,
+  ArrowUpFromLine,
+  ArrowUpRight,
+  BarChart3,
+  BedDouble,
+  CheckCircle2,
+  Copy,
+  Handshake,
+  HeartPulse,
+  Link2,
+  Music2,
+  Pencil,
+  PiggyBank,
+  Plane,
+  Plus,
+  QrCode,
+  Receipt,
+  RefreshCcw,
+  Settings2,
+  ShieldCheck,
+  ShoppingBag,
+  Tag,
+  Trash2,
+  UserCircle,
+  Users,
+  UtensilsCrossed,
+  Wallet,
+  Zap,
+  Crown,
+} from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
 import { LoadingScreen } from '../components/LoadingScreen'
@@ -8,7 +41,7 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../services/api'
 import { forgetFund, getKnownFunds, rememberFund } from '../services/fundRegistry'
 import { getSocket } from '../services/socket'
-import { formatCurrency, formatDate, formatDateTime } from '../utils/format'
+import { formatCurrency, formatDate, formatRelativeDate } from '../utils/format'
 import {
   buildExactSplitState,
   getEntityId,
@@ -56,6 +89,33 @@ async function fetchGroupWorkspace(token, groupId) {
   }
 }
 
+const categoryMeta = {
+  Food: { label: 'Food', icon: UtensilsCrossed, color: 'var(--accent)' },
+  Transport: { label: 'Travel', icon: Plane, color: 'var(--info)' },
+  Accommodation: { label: 'Stay', icon: BedDouble, color: 'var(--primary-light)' },
+  Entertainment: { label: 'Fun', icon: Music2, color: '#f472b6' },
+  Utilities: { label: 'Utils', icon: Zap, color: 'var(--warning)' },
+  Shopping: { label: 'Shop', icon: ShoppingBag, color: '#a78bfa' },
+  Medical: { label: 'Medical', icon: HeartPulse, color: 'var(--danger)' },
+  Other: { label: 'Other', icon: Tag, color: 'var(--text-secondary)' },
+}
+
+function getMoneyValue(entry) {
+  return Number(entry?.amountRupees ?? entry?.amount ?? entry ?? 0) || 0
+}
+
+function getRoleIcon(role) {
+  if (role === 'owner') {
+    return Crown
+  }
+
+  if (role === 'manager') {
+    return ShieldCheck
+  }
+
+  return UserCircle
+}
+
 export default function GroupPage() {
   const { groupId } = useParams()
   const { token, user } = useAuth()
@@ -96,7 +156,6 @@ export default function GroupPage() {
     userId: '',
   })
 
-  // FR-UI-5: Expense List State
   const [expenseSearch, setExpenseSearch] = useState('')
   const [expenseCategory, setExpenseCategory] = useState('')
   const [expensePage, setExpensePage] = useState(1)
@@ -200,27 +259,52 @@ export default function GroupPage() {
   }, [groupId, token])
 
   const currentRole = getMemberRole(group, user.id)
-  const payableSettlements = settlementPlan.filter(
-    (item) => getEntityId(item.from) === user.id,
-  )
-  const totalExactSplit = Object.values(expenseForm.splits).reduce(
-    (sum, amount) => sum + (Number(amount) || 0),
-    0,
-  )
+  const payableSettlements = settlementPlan.filter((item) => getEntityId(item.from) === user.id)
+  const totalExactSplit = Object.values(expenseForm.splits).reduce((sum, amount) => sum + (Number(amount) || 0), 0)
+  const exactSplitDifference = (Number(expenseForm.amount) || 0) - totalExactSplit
 
-  // FR-UI-5: Filtering and Pagination Logic
-  const filteredExpenses = expenses.filter(exp => {
-    const matchesSearch = exp.description?.toLowerCase().includes(expenseSearch.toLowerCase()) || 
-                          exp.title?.toLowerCase().includes(expenseSearch.toLowerCase()) || '';
-    const matchesCategory = expenseCategory ? exp.category === expenseCategory : true;
-    return matchesSearch && matchesCategory;
+  const filteredExpenses = expenses.filter((expense) => {
+    const description = expense.description?.toLowerCase() || ''
+    const title = expense.title?.toLowerCase() || ''
+    const matchesSearch = description.includes(expenseSearch.toLowerCase()) || title.includes(expenseSearch.toLowerCase())
+    const matchesCategory = expenseCategory ? expense.category === expenseCategory : true
+    return matchesSearch && matchesCategory
   })
 
-  const totalExpensePages = Math.ceil(filteredExpenses.length / EXPENSES_PER_PAGE) || 1
-  const paginatedExpenses = filteredExpenses.slice(
-    (expensePage - 1) * EXPENSES_PER_PAGE,
-    expensePage * EXPENSES_PER_PAGE
+  const visibleExpenses = filteredExpenses.slice(0, expensePage * EXPENSES_PER_PAGE)
+  const canLoadMoreExpenses = visibleExpenses.length < filteredExpenses.length
+
+  const memberBalances = useMemo(
+    () =>
+      (group?.members ?? []).map((member) => {
+        const memberId = getEntityId(member.user)
+        const net = balances.reduce((sum, balance) => {
+          const amount = getMoneyValue(balance)
+
+          if (getEntityId(balance.from) === memberId) {
+            return sum - amount
+          }
+
+          if (getEntityId(balance.to) === memberId) {
+            return sum + amount
+          }
+
+          return sum
+        }, 0)
+
+        return {
+          id: memberId,
+          name: member.user?.name || 'Unknown member',
+          email: member.user?.email || '',
+          role: member.role,
+          net,
+          isCurrentUser: memberId === user.id,
+        }
+      }),
+    [balances, group?.members, user.id],
   )
+
+  const myNetBalance = memberBalances.find((entry) => entry.isCurrentUser)?.net ?? 0
 
   async function handleExpenseSubmit(event) {
     event.preventDefault()
@@ -375,9 +459,17 @@ export default function GroupPage() {
 
   function handleForgetFund(fundId) {
     forgetFund(groupId, fundId)
-    setFundSnapshots((current) =>
-      current.filter((entry) => getEntityId(entry) !== fundId),
-    )
+    setFundSnapshots((current) => current.filter((entry) => getEntityId(entry) !== fundId))
+  }
+
+  async function handleCopyInvite() {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setNotice('Invite link copied to the clipboard.')
+      setError('')
+    } catch {
+      setError('Unable to copy the invite link right now.')
+    }
   }
 
   if (loading) {
@@ -386,67 +478,208 @@ export default function GroupPage() {
 
   if (!group) {
     return (
-      <div className="max-w-2xl mx-auto mt-12">
+      <div className="mx-auto mt-12 max-w-2xl">
         <EmptyState
-          title="Group not available"
-          description="This group could not be loaded with the current token."
           action={
-            <Link className="btn btn-primary" to="/dashboard">
+            <Link className="btn btn-primary sm:w-auto" to="/dashboard">
+              <ArrowRight size={18} strokeWidth={1.5} />
               Back to dashboard
             </Link>
           }
+          description="This group could not be loaded with the current token."
+          icon={Users}
+          title="Group not available"
         />
       </div>
     )
   }
 
+  const RoleIcon = getRoleIcon(currentRole)
+
   return (
-    <>
-      <section className="flex flex-col md:flex-row gap-6 md:items-center justify-between fin-card bg-brand text-white border-none rounded-2xl shadow-fin-md mb-6">
-        <div className="flex-1">
-          <Link className="text-accent-light hover:text-white text-sm font-semibold mb-4 inline-block transition-fin" to="/dashboard">
-            &larr; Back to dashboard
+    <div className="space-y-6 pb-8">
+      <section className={`hero-banner fin-card hero-balance ${notice ? 'flash-positive' : error ? 'flash-negative' : ''}`}>
+        <div className="fin-card-inner flex flex-col gap-5">
+          <Link className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" to="/dashboard">
+            <ArrowRight size={16} strokeWidth={1.5} />
+            Back to dashboard
           </Link>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="fin-pill bg-white/20 text-white border-white/30 text-[10px] uppercase tracking-wider">{currentRole} access</span>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="avatar h-20 w-20 rounded-[28px] text-2xl">{getInitials(group.name)}</div>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-display md:text-5xl">{group.name}</h1>
+                <span className="fin-pill fin-pill-neutral capitalize">
+                  <RoleIcon size={16} strokeWidth={1.5} />
+                  {currentRole}
+                </span>
+              </div>
+              <p className="fin-copy max-w-2xl text-base">
+                {group.description || 'No description yet. This workspace is ready for expenses, settlements, and shared funds.'}
+              </p>
+              <div className="summary-pills">
+                <span className="fin-pill fin-pill-neutral">
+                  <Users size={16} strokeWidth={1.5} />
+                  {group.members?.length ?? 0} members
+                </span>
+                <span className={myNetBalance > 0 ? 'fin-pill fin-pill-positive' : myNetBalance < 0 ? 'fin-pill fin-pill-negative' : 'fin-pill fin-pill-neutral'}>
+                  {myNetBalance > 0 ? <ArrowDownLeft size={16} strokeWidth={1.5} /> : myNetBalance < 0 ? <ArrowUpRight size={16} strokeWidth={1.5} /> : <CheckCircle2 size={16} strokeWidth={1.5} />}
+                  {myNetBalance > 0 ? 'You are owed' : myNetBalance < 0 ? 'You owe' : 'Settled up'} {formatCurrency(Math.abs(myNetBalance))}
+                </span>
+              </div>
+            </div>
           </div>
-          <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">{group.name}</h1>
-          <p className="text-sm text-slate-300 max-w-lg">
-            {group.description || 'No description yet. This group is ready for expenses, settlements, and funds.'}
-          </p>
         </div>
-        <div className="bg-white/10 p-5 rounded-xl border border-white/20 backdrop-blur-md md:max-w-xs flex flex-col gap-3">
-          <p className="text-xs font-bold text-white tracking-widest uppercase m-0">At a glance</p>
-          <p className="text-sm text-slate-200 m-0">Created by <strong className="text-white">{group.createdBy?.name || 'Unknown'}</strong>.</p>
-          <p className="text-sm text-slate-200 m-0"><strong className="text-white">{group.members?.length ?? 0}</strong> active members in this workspace.</p>
-          <div className="flex gap-2 mt-2">
-            <Link className="btn bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs px-3 py-1.5 flex-1 text-center" to={`/groups/${groupId}/analytics`}>Analytics</Link>
-            {['owner', 'manager'].includes(currentRole) && (
-              <Link className="btn bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs px-3 py-1.5 flex-1 text-center" to={`/groups/${groupId}/settings`}>Settings</Link>
-            )}
+
+        <div className="fin-card fin-card-static p-5">
+          <div className="fin-card-inner flex h-full flex-col gap-4">
+            <p className="fin-kicker">Quick actions</p>
+            <div className="grid gap-3">
+              <button className="btn btn-primary sm:w-auto" onClick={handleCopyInvite} type="button">
+                <Link2 size={18} strokeWidth={1.5} />
+                Invite
+              </button>
+              <Link className="btn btn-secondary sm:w-auto" to={`/groups/${groupId}/analytics`}>
+                <BarChart3 size={18} strokeWidth={1.5} />
+                Analytics
+              </Link>
+              {['owner', 'manager'].includes(currentRole) ? (
+                <Link className="btn btn-ghost sm:w-auto" to={`/groups/${groupId}/settings`}>
+                  <Settings2 size={18} strokeWidth={1.5} />
+                  Settings
+                </Link>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Members" value={group.members?.length ?? 0} />
-        <StatCard label="Pair-wise balances" value={balances.length} />
-        <StatCard label="Settlement plan" value={settlementPlan.length} />
-        <StatCard label="Expense history" value={expenses.length} />
+      {(notice || error) && (
+        <div className="notice-stack">
+          {notice ? (
+            <div className="notice notice--success">
+              <CheckCircle2 color="var(--success)" size={18} strokeWidth={1.5} />
+              <p className="text-sm text-[var(--success)]">{notice}</p>
+            </div>
+          ) : null}
+          {error ? (
+            <div className="notice notice--error">
+              <AlertCircle color="var(--danger)" size={18} strokeWidth={1.5} />
+              <p className="text-sm text-[var(--danger)]">{error}</p>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 stagger-grid">
+        <StatCard format="number" icon={Users} label="Members" value={group.members?.length ?? 0} />
+        <StatCard format="number" icon={ArrowRight} label="Balance pairs" value={balances.length} />
+        <StatCard format="number" icon={Handshake} label="Settlement plan" value={settlementPlan.length} />
+        <StatCard format="number" icon={Receipt} label="Expenses" value={expenses.length} />
       </section>
 
-      {notice ? <p className="fin-pill fin-pill-positive w-full justify-start text-sm px-4 py-3 mb-6">{notice}</p> : null}
-      {error ? <p className="fin-pill fin-pill-negative w-full justify-start text-sm px-4 py-3 mb-6">{error}</p> : null}
+      <SectionCard eyebrow="Balances" icon={Users} subtitle="Everyone's live position in this group, including who needs to receive and who needs to settle." title="Member balances">
+        {memberBalances.length ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {memberBalances.map((member) => {
+              const MemberRoleIcon = getRoleIcon(member.role)
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SectionCard
-          eyebrow="Actions"
-          subtitle="Equal splits use the backend’s automatic member distribution. Exact splits must add up perfectly."
-          title="Add expense"
-        >
-          <form className="flex flex-col gap-4" onSubmit={handleExpenseSubmit}>
+              return (
+                <article
+                  className={`fin-card p-5 ${member.isCurrentUser ? 'border-[var(--primary)] shadow-[var(--shadow-card),var(--shadow-glow-blue)]' : ''}`}
+                  key={member.id}
+                >
+                  <div className="fin-card-inner flex h-full flex-col gap-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="avatar h-12 w-12 rounded-2xl">{getInitials(member.name)}</div>
+                        <div>
+                          <strong className="font-cabinet text-sm text-[var(--text-primary)]">{member.name}</strong>
+                          <p className="text-xs text-[var(--text-secondary)]">{member.email || 'Email not shared'}</p>
+                        </div>
+                      </div>
+                      <span className="fin-pill fin-pill-neutral capitalize">
+                        <MemberRoleIcon size={14} strokeWidth={1.5} />
+                        {member.role}
+                      </span>
+                    </div>
+
+                    <div className={member.net > 0 ? 'balance-positive text-2xl font-display' : member.net < 0 ? 'balance-negative text-2xl font-display' : 'balance-neutral text-2xl font-display'}>
+                      {formatCurrency(Math.abs(member.net))}
+                    </div>
+
+                    <span className={member.net > 0 ? 'fin-pill fin-pill-positive' : member.net < 0 ? 'fin-pill fin-pill-negative' : 'fin-pill fin-pill-positive'}>
+                      {member.net > 0 ? <ArrowDownLeft size={16} strokeWidth={1.5} /> : member.net < 0 ? <ArrowUpRight size={16} strokeWidth={1.5} /> : <CheckCircle2 size={16} strokeWidth={1.5} />}
+                      {member.net > 0 ? 'Receives money' : member.net < 0 ? 'Needs to settle' : 'Settles up'}
+                    </span>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        ) : (
+          <EmptyState description="Member balances will appear here after the first shared expense lands." icon={Users} title="No balances yet" />
+        )}
+      </SectionCard>
+
+      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <SectionCard eyebrow="Settle up" icon={Handshake} subtitle="The backend's simplified plan for clearing the minimum number of payments." title="Recommended settlements">
+          {settlementPlan.length ? (
+            <div className="grid gap-3">
+              {settlementPlan.map((item) => {
+                const isYou = getEntityId(item.from) === user.id || getEntityId(item.to) === user.id
+                return (
+                  <article
+                    className={`rounded-[22px] border p-4 ${isYou ? 'border-[rgba(37,99,235,0.32)] bg-[rgba(37,99,235,0.12)]' : 'border-[var(--glass-border)] bg-[rgba(255,255,255,0.03)]'}`}
+                    key={`${getEntityId(item.from)}-${getEntityId(item.to)}`}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="avatar h-10 w-10 rounded-xl">{getInitials(item.from?.name)}</div>
+                        <ArrowRight color="var(--primary-light)" size={18} strokeWidth={1.5} />
+                        <div className="avatar h-10 w-10 rounded-xl">{getInitials(item.to?.name)}</div>
+                      </div>
+                      <span className="fin-pill fin-pill-neutral">{formatCurrency(item.amountRupees ?? item.amount)}</span>
+                    </div>
+                    <p className="mt-3 font-cabinet text-sm text-[var(--text-primary)]">
+                      {item.from?.name} pays {item.to?.name}
+                    </p>
+                  </article>
+                )
+              })}
+            </div>
+          ) : (
+            <EmptyState description="If the group is already balanced, this section stays quiet." icon={Handshake} title="Nothing to settle right now" />
+          )}
+        </SectionCard>
+
+        <SectionCard eyebrow="Recorded settlements" icon={CheckCircle2} subtitle="Recently completed debt settlements returned by the current API." title="Settlement history">
+          {settlementHistory.length ? (
+            <div className="timeline">
+              {settlementHistory.map((item) => (
+                <article className="timeline-item" key={getEntityId(item)}>
+                  <strong className="font-cabinet text-sm text-[var(--text-primary)]">
+                    {item.from?.name} paid {item.to?.name}
+                  </strong>
+                  <p className="fin-copy text-sm">
+                    {formatCurrency(item.amountRupees ?? item.amount)} by {(item.method || 'cash').toUpperCase()}
+                  </p>
+                  <span className="text-xs text-[var(--text-secondary)]">{formatRelativeDate(item.createdAt)}</span>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState description="Settlements will show up here once members start closing debts." icon={CheckCircle2} title="No settlements yet" />
+          )}
+        </SectionCard>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <SectionCard eyebrow="Expense flow" icon={Receipt} subtitle="Record the next expense with equal or exact splits. Exact mode updates the validation bar live." title="Add expense">
+          <form className="grid gap-4" onSubmit={handleExpenseSubmit}>
             <label className="block">
-              <span className="fin-label">Description</span>
+              <span className="fin-label">Title</span>
               <input
                 className="fin-input"
                 onChange={(event) =>
@@ -455,7 +688,7 @@ export default function GroupPage() {
                     description: event.target.value,
                   }))
                 }
-                placeholder="Groceries, cab fare, bookings..."
+                placeholder="Groceries, cab fare, hotel booking..."
                 required
                 value={expenseForm.description}
               />
@@ -463,57 +696,62 @@ export default function GroupPage() {
 
             <label className="block">
               <span className="fin-label">Amount</span>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
-                <input
-                  className="fin-input pl-8"
-                  min="1"
-                  onChange={(event) =>
-                    setExpenseForm((current) => ({
-                      ...current,
-                      amount: event.target.value,
-                    }))
-                  }
-                  placeholder="1200"
-                  required
-                  step="1"
-                  type="number"
-                  value={expenseForm.amount}
-                />
-              </div>
-            </label>
-
-            <label className="block">
-              <span className="fin-label">Split type</span>
-              <select
-                className="fin-input appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyMCAyMCIgc3Ryb2tlPSIjNmI3MjgwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNNiA4bDQgNCA0LTQiLz48L3N2Zz4=')] bg-no-repeat bg-[position:right_1rem_center] bg-[length:1.2em_1.2em]"
+              <input
+                className="fin-input"
+                min="1"
                 onChange={(event) =>
                   setExpenseForm((current) => ({
                     ...current,
-                    splitType: event.target.value,
+                    amount: event.target.value,
                   }))
                 }
-                value={expenseForm.splitType}
-              >
-                <option value="equal">Equal split</option>
-                <option value="exact">Exact split</option>
-              </select>
+                placeholder="1200"
+                required
+                step="1"
+                type="number"
+                value={expenseForm.amount}
+              />
             </label>
 
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { value: 'equal', label: 'Equal split' },
+                { value: 'exact', label: 'Custom exact' },
+              ].map((option) => (
+                <button
+                  className={expenseForm.splitType === option.value ? 'btn btn-primary sm:w-auto' : 'btn btn-ghost sm:w-auto'}
+                  key={option.value}
+                  onClick={() =>
+                    setExpenseForm((current) => ({
+                      ...current,
+                      splitType: option.value,
+                    }))
+                  }
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
             {expenseForm.splitType === 'exact' ? (
-              <div className="flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                <p className="text-sm font-semibold text-slate-700">
-                  Exact split total: <span className="tabular-nums font-bold text-brand">{formatCurrency(totalExactSplit)}</span>
-                </p>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-[22px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className={`mb-4 rounded-[16px] px-4 py-3 text-sm ${exactSplitDifference === 0 ? 'bg-[rgba(5,150,105,0.12)] text-[var(--success)]' : 'bg-[rgba(220,38,38,0.12)] text-[var(--danger)]'}`}>
+                  {exactSplitDifference === 0
+                    ? `${formatCurrency(0)} remaining`
+                    : exactSplitDifference > 0
+                      ? `Split is ${formatCurrency(exactSplitDifference)} short`
+                      : `Split is ${formatCurrency(Math.abs(exactSplitDifference))} over`}
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
                   {group.members?.map((member) => {
                     const memberId = getEntityId(member.user)
 
                     return (
                       <label className="block" key={memberId}>
-                        <span className="text-xs font-semibold text-slate-600 mb-1 block truncate">{member.user?.name || memberId}</span>
+                        <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">{member.user?.name || 'Unknown member'}</span>
                         <input
-                          className="fin-input py-2 text-sm"
+                          className="fin-input"
                           min="0"
                           onChange={(event) =>
                             setExpenseForm((current) => ({
@@ -536,33 +774,27 @@ export default function GroupPage() {
               </div>
             ) : null}
 
-            <div className="flex justify-end mt-2">
-              <button className="btn btn-primary w-full sm:w-auto" disabled={submitting.expense} type="submit">
+            <div className="flex justify-end">
+              <button className="btn btn-primary sm:w-auto" disabled={submitting.expense} type="submit">
+                <Plus size={18} strokeWidth={1.5} />
                 {submitting.expense ? 'Saving expense...' : 'Add expense'}
               </button>
             </div>
           </form>
         </SectionCard>
 
-        <SectionCard
-          eyebrow="Settlement"
-          subtitle="Only debts where you are the payer can be settled from this form, because the API uses your authenticated user ID as the source."
-          title="Record a settlement"
-        >
-          <form className="flex flex-col gap-4" onSubmit={handleSettlementSubmit}>
+        <SectionCard eyebrow="Settlement" icon={Handshake} subtitle="Record a payment against the simplified plan. If you pick someone from the list, their recommended amount fills in automatically." title="Record settlement">
+          <form className="grid gap-4" onSubmit={handleSettlementSubmit}>
             <label className="block">
               <span className="fin-label">Paying to</span>
               <select
-                className="fin-input appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyMCAyMCIgc3Ryb2tlPSIjNmI3MjgwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNNiA4bDQgNCA0LTQiLz48L3N2Zz4=')] bg-no-repeat bg-[position:right_1rem_center] bg-[length:1.2em_1.2em]"
+                className="fin-select"
                 onChange={(event) => {
-                  const selected = payableSettlements.find(
-                    (item) => getEntityId(item.to) === event.target.value,
-                  )
-
+                  const selected = payableSettlements.find((item) => getEntityId(item.to) === event.target.value)
                   setSettlementForm((current) => ({
                     ...current,
                     toUserId: event.target.value,
-                    amount: selected ? String(selected.amount) : current.amount,
+                    amount: selected ? String(selected.amountRupees ?? selected.amount) : current.amount,
                   }))
                 }}
                 required
@@ -571,7 +803,7 @@ export default function GroupPage() {
                 <option value="">Choose a member</option>
                 {payableSettlements.map((item) => (
                   <option key={getEntityId(item.to)} value={getEntityId(item.to)}>
-                    {item.to?.name} • {formatCurrency(item.amount)}
+                    {item.to?.name} • {formatCurrency(item.amountRupees ?? item.amount)}
                   </option>
                 ))}
               </select>
@@ -579,41 +811,39 @@ export default function GroupPage() {
 
             <label className="block">
               <span className="fin-label">Amount</span>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
-                <input
-                  className="fin-input pl-8"
-                  min="1"
-                  onChange={(event) =>
-                    setSettlementForm((current) => ({
-                      ...current,
-                      amount: event.target.value,
-                    }))
-                  }
-                  required
-                  step="0.01"
-                  type="number"
-                  value={settlementForm.amount}
-                />
-              </div>
-            </label>
-
-            <label className="block">
-              <span className="fin-label">Method</span>
-              <select
-                className="fin-input appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyMCAyMCIgc3Ryb2tlPSIjNmI3MjgwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNNiA4bDQgNCA0LTQiLz48L3N2Zz4=')] bg-no-repeat bg-[position:right_1rem_center] bg-[length:1.2em_1.2em]"
+              <input
+                className="fin-input"
+                min="1"
                 onChange={(event) =>
                   setSettlementForm((current) => ({
                     ...current,
-                    method: event.target.value,
+                    amount: event.target.value,
                   }))
                 }
-                value={settlementForm.method}
-              >
-                <option value="cash">Cash</option>
-                <option value="upi">UPI</option>
-              </select>
+                required
+                step="0.01"
+                type="number"
+                value={settlementForm.amount}
+              />
             </label>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                className={settlementForm.method === 'cash' ? 'btn btn-primary sm:w-auto' : 'btn btn-ghost sm:w-auto'}
+                onClick={() => setSettlementForm((current) => ({ ...current, method: 'cash' }))}
+                type="button"
+              >
+                Cash
+              </button>
+              <button
+                className={settlementForm.method === 'upi' ? 'btn btn-primary sm:w-auto' : 'btn btn-ghost sm:w-auto'}
+                onClick={() => setSettlementForm((current) => ({ ...current, method: 'upi' }))}
+                type="button"
+              >
+                <QrCode size={18} strokeWidth={1.5} />
+                UPI
+              </button>
+            </div>
 
             <label className="block">
               <span className="fin-label">Reference</span>
@@ -625,30 +855,180 @@ export default function GroupPage() {
                     reference: event.target.value,
                   }))
                 }
-                placeholder="Optional UPI reference"
+                placeholder="Optional reference or note"
                 value={settlementForm.reference}
               />
             </label>
 
-            <div className="flex justify-end mt-2">
-              <button
-                className="btn btn-primary w-full sm:w-auto"
-                disabled={submitting.settlement || !payableSettlements.length}
-                type="submit"
-              >
+            <div className="flex justify-end">
+              <button className="btn btn-primary sm:w-auto" disabled={submitting.settlement || !payableSettlements.length} type="submit">
+                <Handshake size={18} strokeWidth={1.5} />
                 {submitting.settlement ? 'Recording...' : 'Record settlement'}
               </button>
             </div>
           </form>
         </SectionCard>
+      </div>
 
+      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <SectionCard
-          eyebrow="Funds"
-          subtitle="The current backend lets us create and open funds, but not list all funds by group. Created or linked fund IDs are saved on this device."
-          title="Fund management"
+          actions={
+            <button className="btn btn-ghost sm:w-auto" onClick={() => void loadWorkspace({ silent: false })} type="button">
+              <RefreshCcw size={18} strokeWidth={1.5} />
+              Refresh
+            </button>
+          }
+          eyebrow="Expenses"
+          icon={Receipt}
+          subtitle="Filter by category or search by name, then load more as the list grows."
+          title="Expense list"
         >
-          <div className="flex flex-col gap-8">
-            <form className="flex flex-col gap-4" onSubmit={handleFundSubmit}>
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
+            <label className="block">
+              <span className="fin-label">Search</span>
+              <input
+                className="fin-input"
+                onChange={(event) => {
+                  setExpenseSearch(event.target.value)
+                  setExpensePage(1)
+                }}
+                placeholder="Search expenses..."
+                value={expenseSearch}
+              />
+            </label>
+            <label className="block">
+              <span className="fin-label">Category</span>
+              <select
+                className="fin-select"
+                onChange={(event) => {
+                  setExpenseCategory(event.target.value)
+                  setExpensePage(1)
+                }}
+                value={expenseCategory}
+              >
+                <option value="">All categories</option>
+                {Object.entries(categoryMeta).map(([value, meta]) => (
+                  <option key={value} value={value}>
+                    {meta.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {visibleExpenses.length ? (
+            <div className="grid gap-3">
+              {visibleExpenses.map((expense) => {
+                const meta = categoryMeta[expense.category] || categoryMeta.Other
+                const CategoryIcon = meta.icon
+
+                return (
+                  <article className="rounded-[22px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.03)] p-4" key={getEntityId(expense)}>
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="empty-state-icon h-12 w-12 rounded-2xl" style={{ color: meta.color }}>
+                          <CategoryIcon size={20} strokeWidth={1.5} />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <strong className="font-cabinet text-sm text-[var(--text-primary)]">{expense.title || expense.description}</strong>
+                            <span className="fin-pill fin-pill-neutral">{meta.label}</span>
+                          </div>
+                          <p className="fin-copy text-sm">{formatDate(expense.date || expense.createdAt)} • Paid by {expense.paidBy?.name || 'Unknown'}</p>
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {expense.splits?.map((split) => (
+                              <span className="fin-pill fin-pill-neutral" key={getEntityId(split.user)}>
+                                {getInitials(split.user?.name)} {formatCurrency(split.amountRupees ?? split.amount)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 md:flex-col md:items-end">
+                        <div className="text-right">
+                          <p className="text-xl font-display balance-positive">{formatCurrency(expense.amountRupees ?? expense.amount)}</p>
+                          <p className="text-xs text-[var(--text-secondary)] capitalize">{expense.splitType} split</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button aria-label="Edit expense" className="btn btn-ghost btn-icon" type="button">
+                            <Pencil size={16} strokeWidth={1.5} />
+                          </button>
+                          <button aria-label="Delete expense" className="btn btn-ghost btn-icon" type="button">
+                            <Trash2 size={16} strokeWidth={1.5} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+
+              {canLoadMoreExpenses ? (
+                <button className="btn btn-secondary sm:w-auto" onClick={() => setExpensePage((page) => page + 1)} type="button">
+                  <ArrowDownLeft size={18} strokeWidth={1.5} />
+                  Load more
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <EmptyState
+              description={expenses.length ? 'Try adjusting the search or category filter.' : 'Your first group expense will show up here.'}
+              icon={Receipt}
+              title="No expenses found"
+            />
+          )}
+        </SectionCard>
+
+        <SectionCard eyebrow="People" icon={Users} subtitle="Everyone currently attached to this workspace, with their backend role reflected here." title="Members">
+          <div className="grid gap-3">
+            {group.members?.map((member) => {
+              const memberId = getEntityId(member.user)
+              const MemberRoleIcon = getRoleIcon(member.role)
+
+              return (
+                <article className="rounded-[22px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.03)] p-4" key={memberId}>
+                  <div className="flex items-center gap-3">
+                    <div className="avatar h-11 w-11 rounded-xl">{getInitials(member.user?.name)}</div>
+                    <div className="min-w-0 flex-1">
+                      <strong className="block truncate font-cabinet text-sm text-[var(--text-primary)]">{member.user?.name || 'Unknown member'}</strong>
+                      <p className="truncate text-xs text-[var(--text-secondary)]">{member.user?.email || 'Email not shared'}</p>
+                    </div>
+                    <span className="fin-pill fin-pill-neutral capitalize">
+                      <MemberRoleIcon size={14} strokeWidth={1.5} />
+                      {member.role}
+                    </span>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+
+          <form className="grid gap-4 border-t border-white/10 pt-4" onSubmit={handleMemberSubmit}>
+            <label className="block">
+              <span className="fin-label">Add member</span>
+              <input
+                className="fin-input"
+                disabled={!['owner', 'manager'].includes(currentRole)}
+                onChange={(event) => setMemberForm({ userId: event.target.value })}
+                placeholder="Paste the member access ID"
+                value={memberForm.userId}
+              />
+            </label>
+            <div className="flex justify-end">
+              <button className="btn btn-secondary sm:w-auto" disabled={submitting.member || !['owner', 'manager'].includes(currentRole)} type="submit">
+                <Plus size={18} strokeWidth={1.5} />
+                {submitting.member ? 'Adding...' : 'Add member'}
+              </button>
+            </div>
+          </form>
+        </SectionCard>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <SectionCard eyebrow="Funds" icon={Wallet} subtitle="Create shared funds or link existing ones saved to this device." title="Fund management">
+          <div className="grid gap-6">
+            <form className="grid gap-4" onSubmit={handleFundSubmit}>
               <label className="block">
                 <span className="fin-label">Fund name</span>
                 <input
@@ -668,7 +1048,7 @@ export default function GroupPage() {
               <label className="block">
                 <span className="fin-label">Description</span>
                 <textarea
-                  className="fin-input min-h-[5rem]"
+                  className="fin-textarea"
                   onChange={(event) =>
                     setFundForm((current) => ({
                       ...current,
@@ -676,112 +1056,69 @@ export default function GroupPage() {
                     }))
                   }
                   placeholder="What the fund is meant for."
-                  rows={2}
+                  rows={3}
                   value={fundForm.description}
                 />
               </label>
 
-              <div className="flex justify-end mt-2">
-                <button className="btn btn-primary w-full sm:w-auto" disabled={submitting.fund} type="submit">
+              <div className="flex justify-end">
+                <button className="btn btn-primary sm:w-auto" disabled={submitting.fund} type="submit">
+                  <Wallet size={18} strokeWidth={1.5} />
                   {submitting.fund ? 'Creating fund...' : 'Create fund'}
                 </button>
               </div>
             </form>
 
-            <form className="flex flex-col sm:flex-row items-end gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl" onSubmit={handleRememberFund}>
-              <label className="block flex-1 w-full">
-                <span className="text-xs font-semibold text-slate-600 block mb-1">Open an existing fund by ID</span>
-                <input
-                  className="fin-input py-2.5 text-sm"
-                  onChange={(event) => setRememberFundId(event.target.value)}
-                  placeholder="Paste fund ID"
-                  value={rememberFundId}
-                />
-              </label>
-              <button
-                className="btn btn-secondary w-full sm:w-auto py-2.5"
-                disabled={submitting.rememberFund}
-                type="submit"
-              >
-                Link fund
-              </button>
+            <form className="rounded-[22px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.03)] p-4" onSubmit={handleRememberFund}>
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <label className="block">
+                  <span className="fin-label">Link existing fund</span>
+                  <input
+                    className="fin-input"
+                    onChange={(event) => setRememberFundId(event.target.value)}
+                    placeholder="Paste the fund access ID"
+                    value={rememberFundId}
+                  />
+                </label>
+                <button className="btn btn-secondary sm:w-auto" disabled={submitting.rememberFund} type="submit">
+                  <Copy size={18} strokeWidth={1.5} />
+                  Link fund
+                </button>
+              </div>
             </form>
           </div>
         </SectionCard>
 
-        <SectionCard
-          eyebrow="Members"
-          subtitle="Because the API currently expects a raw Mongo user ID, this is a low-level add-member flow rather than an invite flow."
-          title="Add member by user ID"
-        >
-          <form className="flex flex-col sm:flex-row items-end gap-3" onSubmit={handleMemberSubmit}>
-            <label className="block flex-1 w-full">
-              <span className="fin-label">User ID</span>
-              <input
-                className="fin-input"
-                disabled={!['owner', 'manager'].includes(currentRole)}
-                onChange={(event) =>
-                  setMemberForm({
-                    userId: event.target.value,
-                  })
-                }
-                placeholder="Paste a Mongo user ID"
-                value={memberForm.userId}
-              />
-            </label>
-            <button
-              className="btn btn-secondary py-3 w-full sm:w-auto"
-              disabled={submitting.member || !['owner', 'manager'].includes(currentRole)}
-              type="submit"
-            >
-              {submitting.member ? 'Adding...' : 'Add member'}
-            </button>
-          </form>
-        </SectionCard>
-      </div>
-
-      <div className="section-grid section-grid--wide">
-        <SectionCard
-          eyebrow="Saved funds"
-          subtitle="Funds shown here were either created from this page or manually linked by ID on this device."
-          title="Known funds"
-        >
+        <SectionCard eyebrow="Known funds" icon={PiggyBank} subtitle="These funds were created here or linked from this device." title="Saved funds">
           {fundSnapshots.length ? (
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid gap-3">
               {fundSnapshots.map((fund) => {
                 const fundId = getEntityId(fund)
+                const fundBalance = getMoneyValue(fund?.balanceRupees ?? fund?.balance)
 
                 return (
-                  <article className="border border-slate-200 rounded-2xl p-5 hover:shadow-fin-md transition-fin flex flex-col gap-4 bg-slate-50/50" key={fundId}>
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="overflow-hidden">
-                        <p className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-1 truncate">Fund ID • {fundId}</p>
-                        <h3 className="text-lg font-bold text-brand m-0 leading-tight truncate">{fund.name}</h3>
+                  <article className="rounded-[22px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.03)] p-4" key={fundId}>
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <strong className="font-cabinet text-sm text-[var(--text-primary)]">{fund.name}</strong>
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          {fund.unavailable ? 'Currently unavailable' : 'Saved on this device'}
+                        </p>
                       </div>
-                      <span className={`fin-pill whitespace-nowrap ${fund.unavailable ? 'fin-pill-negative' : 'fin-pill-neutral'}`}>
-                        {fund.unavailable ? 'Unavailable' : 'Saved'}
+                      <span className={fund.unavailable ? 'fin-pill fin-pill-negative' : 'fin-pill fin-pill-neutral'}>
+                        {fund.unavailable ? 'Unavailable' : 'Active'}
                       </span>
                     </div>
-
-                    <p className="text-sm text-slate-600 m-0">
-                      {fund.unavailable
-                        ? 'This saved fund could not be fetched right now.'
-                        : <span className="font-semibold">Current balance: <span className="tabular-nums">{formatCurrency(fund.balance)}</span></span>}
+                    <p className="mb-4 text-lg font-display balance-positive">
+                      {fund.unavailable ? 'Unavailable' : formatCurrency(fundBalance)}
                     </p>
-
-                    <div className="flex gap-2 pt-2 border-t border-slate-200/60">
-                      <Link
-                        className="btn btn-secondary flex-1"
-                        state={{ groupId }}
-                        to={`/funds/${fundId}`}
-                      >
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <Link className="btn btn-secondary sm:w-auto" state={{ groupId }} to={`/funds/${fundId}`}>
+                        <Wallet size={18} strokeWidth={1.5} />
                         Open fund
                       </Link>
-                      <button
-                        className="btn btn-ghost text-red-600 hover:bg-red-50"
-                        onClick={() => handleForgetFund(fundId)}
-                        type="button"
-                      >
+                      <button className="btn btn-ghost sm:w-auto" onClick={() => handleForgetFund(fundId)} type="button">
+                        <Trash2 size={18} strokeWidth={1.5} />
                         Remove
                       </button>
                     </div>
@@ -790,249 +1127,57 @@ export default function GroupPage() {
               })}
             </div>
           ) : (
-            <EmptyState
-              title="No saved funds yet"
-              description="Create a fund or paste an existing fund ID to keep it handy from this group view."
-            />
+            <EmptyState description="Create a fund or link an existing one to keep it close from this group view." icon={PiggyBank} title="No saved funds yet" />
           )}
-        </SectionCard>
-
-        <SectionCard eyebrow="People" subtitle="Roles come from the backend group document." title="Members">
-          <div className="flex flex-col gap-3">
-            {group.members?.map((member) => (
-              <article className="flex items-center gap-4 p-4 border border-slate-200 rounded-xl bg-white hover:border-slate-300 transition-fin" key={getEntityId(member.user)}>
-                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm shrink-0">{getInitials(member.user?.name)}</div>
-                <div className="flex-1 overflow-hidden">
-                  <strong className="block text-sm text-brand truncate">{member.user?.name || 'Unknown member'}</strong>
-                  <p className="text-xs text-slate-500 truncate m-0">{member.user?.email || getEntityId(member.user)}</p>
-                </div>
-                <span className="fin-pill fin-pill-neutral capitalize">{member.role}</span>
-              </article>
-            ))}
-          </div>
         </SectionCard>
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
-        <SectionCard eyebrow="Balances" subtitle="Direct pair-wise obligations from the ledger." title="Who owes whom">
+      <div className="grid gap-6 xl:grid-cols-2">
+        <SectionCard eyebrow="Ledger" icon={ArrowRight} subtitle="Direct pairwise obligations from the current backend ledger." title="Who owes whom">
           {balances.length ? (
-            <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
-              <table className="w-full text-left border-collapse min-w-[32rem]">
-                <thead className="bg-slate-50 border-b border-slate-200">
+            <div className="table-surface overflow-x-auto">
+              <table className="data-table">
+                <thead>
                   <tr>
-                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">From</th>
-                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">To</th>
-                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th className="text-right">Amount</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody>
                   {balances.map((balance) => (
-                    <tr className="hover:bg-slate-50 transition-fin" key={`${getEntityId(balance.from)}-${getEntityId(balance.to)}`}>
-                      <td className="py-3 px-4 text-sm font-semibold text-brand">{balance.from?.name}</td>
-                      <td className="py-3 px-4 text-sm font-semibold text-brand">{balance.to?.name}</td>
-                      <td className="py-3 px-4 text-sm font-bold tabular-nums text-brand text-right">{formatCurrency(balance.amount)}</td>
+                    <tr key={`${getEntityId(balance.from)}-${getEntityId(balance.to)}`}>
+                      <td>{balance.from?.name}</td>
+                      <td>{balance.to?.name}</td>
+                      <td className="text-right font-cabinet font-bold text-[var(--text-primary)]">{formatCurrency(balance.amountRupees ?? balance.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <EmptyState
-              title="No balances yet"
-              description="Once you add expenses, Arthika will show direct member-to-member balances here."
-            />
+            <EmptyState description="Once you add expenses, pairwise balances will show up here." icon={ArrowRight} title="No balances yet" />
           )}
         </SectionCard>
 
-        <SectionCard
-          eyebrow="Simplified"
-          subtitle="Minimum cash-flow plan computed by the backend."
-          title="Settlement plan"
-        >
-          {settlementPlan.length ? (
-            <div className="flex flex-col gap-3">
-              {settlementPlan.map((item) => (
-                <article className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-white hover:border-slate-300 transition-fin" key={`${getEntityId(item.from)}-${getEntityId(item.to)}`}>
-                  <div className="flex-1">
-                    <strong className="block text-sm text-brand">
-                      {item.from?.name} &rarr; {item.to?.name}
-                    </strong>
-                    <p className="text-lg font-bold tabular-nums text-brand m-0">{formatCurrency(item.amount)}</p>
-                  </div>
-                  <span className="fin-pill fin-pill-neutral hidden sm:inline-flex">Recommended</span>
+        <SectionCard eyebrow="History" icon={Receipt} subtitle="Latest activity snapshots returned by the current API." title="Recent records">
+          {expenses.length ? (
+            <div className="timeline">
+              {expenses.slice(0, 5).map((expense) => (
+                <article className="timeline-item" key={getEntityId(expense)}>
+                  <strong className="font-cabinet text-sm text-[var(--text-primary)]">{expense.title || expense.description}</strong>
+                  <p className="fin-copy text-sm">
+                    {formatCurrency(expense.amountRupees ?? expense.amount)} paid by {expense.paidBy?.name || 'Unknown'}.
+                  </p>
+                  <span className="text-xs text-[var(--text-secondary)]">{formatRelativeDate(expense.date || expense.createdAt)}</span>
                 </article>
               ))}
             </div>
           ) : (
-            <EmptyState
-              title="No settlement plan right now"
-              description="If everyone is settled, this area stays quiet."
-            />
+            <EmptyState description="Once the first expense is recorded, the latest records appear here." icon={Receipt} title="No recent records" />
           )}
         </SectionCard>
       </div>
-
-      <div className="grid grid-cols-1 gap-6">
-        <SectionCard eyebrow="Expense history" subtitle="Filter, search, and review all group expenses." title="Recorded expenses">
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <label className="block flex-1">
-                <span className="fin-label">Search</span>
-                <input
-                  className="fin-input"
-                  onChange={(e) => {
-                    setExpenseSearch(e.target.value)
-                    setExpensePage(1)
-                  }}
-                  placeholder="Search description..."
-                  value={expenseSearch}
-                />
-              </label>
-              <label className="block sm:w-48">
-                <span className="fin-label">Category</span>
-                <select
-                  className="fin-input appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyMCAyMCIgc3Ryb2tlPSIjNmI3MjgwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNNiA4bDQgNCA0LTQiLz48L3N2Zz4=')] bg-no-repeat bg-[position:right_1rem_center] bg-[length:1.2em_1.2em]"
-                  onChange={(e) => {
-                    setExpenseCategory(e.target.value)
-                    setExpensePage(1)
-                  }}
-                  value={expenseCategory}
-                >
-                  <option value="">All Categories</option>
-                  <option value="Food">Food</option>
-                  <option value="Transport">Transport</option>
-                  <option value="Accommodation">Accommodation</option>
-                  <option value="Entertainment">Entertainment</option>
-                  <option value="Utilities">Utilities</option>
-                  <option value="Shopping">Shopping</option>
-                  <option value="Medical">Medical</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-            </div>
-
-            {paginatedExpenses.length ? (
-              <>
-                <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
-                  <table className="w-full text-left border-collapse min-w-[48rem]">
-                    <thead className="bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Category</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Payer</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Splits</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {paginatedExpenses.map((expense) => (
-                        <tr className="hover:bg-slate-50 transition-fin" key={getEntityId(expense)}>
-                          <td className="py-3 px-4 text-sm text-slate-500 whitespace-nowrap">{formatDate(expense.date || expense.createdAt)}</td>
-                          <td className="py-3 px-4">
-                            <strong className="block text-sm text-brand">{expense.title || expense.description}</strong>
-                            <small className="text-xs text-slate-400 capitalize">{expense.splitType} split</small>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="fin-pill fin-pill-neutral font-medium">{expense.category || 'Other'}</span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px]">
-                                {getInitials(expense.paidBy?.name)}
-                              </div>
-                              <span className="text-sm font-semibold text-brand">{expense.paidBy?.name}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 text-sm font-bold tabular-nums text-brand text-right">{formatCurrency(expense.amount)}</td>
-                          <td className="py-3 px-4">
-                            <div className="flex flex-wrap gap-1.5">
-                              {expense.splits?.map((split) => (
-                                <span className="fin-pill fin-pill-neutral bg-slate-50 text-[10px]" key={getEntityId(split.user)}>
-                                  {getInitials(split.user?.name)}: <span className="tabular-nums">{formatCurrency(split.amount)}</span>
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {totalExpensePages > 1 && (
-                  <div className="flex items-center justify-center gap-4 mt-4">
-                    <button
-                      className="btn btn-secondary px-3 py-1.5 text-xs"
-                      disabled={expensePage === 1}
-                      onClick={() => setExpensePage(p => p - 1)}
-                      type="button"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-sm font-medium text-slate-500">
-                      Page {expensePage} of {totalExpensePages}
-                    </span>
-                    <button
-                      className="btn btn-secondary px-3 py-1.5 text-xs"
-                      disabled={expensePage === totalExpensePages}
-                      onClick={() => setExpensePage(p => p + 1)}
-                      type="button"
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <EmptyState
-                title="No expenses found"
-                description={expenses.length ? "Try adjusting your search or filters." : "Your first group expense will show up here."}
-              />
-            )}
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          eyebrow="Settlement history"
-          subtitle="Recorded settlements returned by the current API."
-          title="Past settlements"
-        >
-          {settlementHistory.length ? (
-            <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
-              <table className="w-full text-left border-collapse min-w-[32rem]">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">From</th>
-                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">To</th>
-                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Method</th>
-                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
-                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">When</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {settlementHistory.map((item) => (
-                    <tr className="hover:bg-slate-50 transition-fin" key={getEntityId(item)}>
-                      <td className="py-3 px-4 text-sm font-semibold text-brand">{item.from?.name}</td>
-                      <td className="py-3 px-4 text-sm font-semibold text-brand">{item.to?.name}</td>
-                      <td className="py-3 px-4">
-                        <span className="fin-pill fin-pill-neutral capitalize">{item.method || 'cash'}</span>
-                      </td>
-                      <td className="py-3 px-4 text-sm font-bold tabular-nums text-finance-positive text-right">{formatCurrency(item.amount)}</td>
-                      <td className="py-3 px-4 text-sm text-slate-500 text-right">{formatDate(item.createdAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState
-              title="No settlements yet"
-              description="Settlements will appear here once members start closing debts."
-            />
-          )}
-        </SectionCard>
-      </div>
-    </>
+    </div>
   )
 }

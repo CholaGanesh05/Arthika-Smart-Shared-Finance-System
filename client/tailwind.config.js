@@ -8,22 +8,24 @@ export default {
     extend: {
       colors: {
         brand: {
-          DEFAULT: '#0f766e',
-          deep: '#134e4a',
-          light: '#5eead4',
+          DEFAULT: 'var(--primary)',
+          deep: '#1e40af',
+          light: 'var(--primary-light)',
         },
-        'finance-positive': '#166534',
-        'finance-negative': '#b42318',
-        'accent-light': '#5eead4',
+        'finance-positive': 'var(--success)',
+        'finance-negative': 'var(--danger)',
+        'accent-light': 'var(--accent-light)',
       },
       fontFamily: {
-        display: ['Georgia', 'Times New Roman', 'serif'],
-        sans: ['Trebuchet MS', 'Gill Sans', 'Segoe UI', 'sans-serif'],
+        display: ['Playfair Display', 'serif'],
+        sans: ['Inter', 'sans-serif'],
+        cabinet: ['JetBrains Mono', 'monospace'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       boxShadow: {
-        'fin-sm': '0 2px 6px rgba(0,0,0,0.06)',
-        'fin-md': '0 6px 18px rgba(0,0,0,0.08)',
-        'fin-lg': '0 16px 40px rgba(0,0,0,0.10)',
+        'fin-sm': '0 10px 24px rgba(0,0,0,0.25)',
+        'fin-md': '0 18px 38px rgba(0,0,0,0.32)',
+        'fin-lg': '0 28px 60px rgba(0,0,0,0.4)',
       },
       transitionProperty: {
         'fin': 'all',
