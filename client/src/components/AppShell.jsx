@@ -126,11 +126,11 @@ export function AppShell() {
 
           <label className="topbar-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <Search style={{ position: 'absolute', left: '0.9rem', color: 'rgba(255,255,255,0.7)', pointerEvents: 'none' }} size={16} strokeWidth={1.8} />
-            <input aria-label="Search groups, expenses" className="fin-input with-left-icon" placeholder="Search groups, expenses…" type="search" style={{ height: 40, fontSize: '0.875rem', background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }} />
+            <input aria-label="Search groups, expenses" className="fin-input topbar-search-input with-left-icon" placeholder="Search groups, expenses…" type="search" style={{ height: 40, fontSize: '0.875rem', background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }} />
           </label>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <ThemeToggle />
+            <ThemeToggle lightColor="#fff" />
             <button aria-label="Notifications" className="btn btn-ghost btn-icon" style={{ width: 40, height: 40, minWidth: 40, padding: 0, borderRadius: 10, color: '#fff' }} type="button">
               <Bell size={18} strokeWidth={1.8} />
             </button>

@@ -1,7 +1,7 @@
 import { MoonStar, SunMedium } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
 
-export function ThemeToggle({ className = '' }) {
+export function ThemeToggle({ className = '', lightColor = 'var(--primary)' }) {
   const { theme, toggleTheme } = useTheme()
 
   return (
@@ -12,7 +12,7 @@ export function ThemeToggle({ className = '' }) {
       type="button"
     >
       {theme === 'light' ? (
-        <MoonStar color="var(--primary)" size={18} strokeWidth={1.5} />
+        <MoonStar color={lightColor} size={18} strokeWidth={1.5} />
       ) : (
         <SunMedium color="var(--accent-light)" size={18} strokeWidth={1.5} />
       )}

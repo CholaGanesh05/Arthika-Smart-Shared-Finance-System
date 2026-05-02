@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   ArrowRight,
   BarChart3,
@@ -89,6 +90,14 @@ const testimonials = [
 
 export default function LandingPage() {
   const { isAuthenticated } = useAuth()
+  const [activeFeature, setActiveFeature] = useState(0)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveFeature((prev) => (prev + 1) % features.length)
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [])
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--body-top)' }}>
@@ -240,7 +249,7 @@ export default function LandingPage() {
             animation: 'card-enter 600ms ease-out',
           }}>
             <Users size={18} color="var(--primary)" />
-            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>6 members</span>
+            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>5 members</span>
           </div>
         </div>
       </section>
@@ -276,17 +285,46 @@ export default function LandingPage() {
           </p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem' }} className="features-grid">
-          {features.map(({ icon: Icon, title, description, color, bg }) => (
-            <article key={title} className="fin-card" style={{ padding: '1.75rem' }}>
-              <div className="fin-card-inner" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ width: 48, height: 48, borderRadius: 14, background: bg, display: 'grid', placeItems: 'center' }}>
-                  <Icon size={22} color={color} strokeWidth={1.8} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem', position: 'relative' }} className="features-grid">
+          {features.map(({ icon: Icon, title, description, color, bg }, index) => (
+            <div key={title} style={{ position: 'relative' }}>
+              <article 
+                className="fin-card" 
+                style={{ 
+                  padding: '1.75rem',
+                  borderColor: activeFeature === index ? 'var(--primary)' : 'var(--glass-border)',
+                  boxShadow: activeFeature === index ? '0 0 0 2px var(--primary-glow), var(--shadow-hover)' : 'var(--shadow-card)',
+                  transform: activeFeature === index ? 'translateY(-4px)' : 'none',
+                  transition: 'all 300ms ease',
+                  height: '100%'
+                }}
+              >
+                <div className="fin-card-inner" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ 
+                    width: 48, height: 48, borderRadius: 14, 
+                    background: activeFeature === index ? color : bg, 
+                    display: 'grid', placeItems: 'center',
+                    transition: 'background 300ms ease'
+                  }}>
+                    <Icon size={22} color={activeFeature === index ? '#fff' : color} strokeWidth={1.8} style={{ transition: 'color 300ms ease' }} />
+                  </div>
+                  <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
+                  <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>{description}</p>
                 </div>
-                <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
-                <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>{description}</p>
-              </div>
-            </article>
+              </article>
+              {index % 3 !== 2 && index < features.length - 1 && (
+                <div className="hidden md:flex" style={{ 
+                  position: 'absolute', right: '-1.4rem', top: '50%', transform: 'translate(50%, -50%)', zIndex: 10,
+                  opacity: activeFeature === index ? 1 : 0.3,
+                  transition: 'opacity 300ms ease'
+                }}>
+                  <ArrowRight size={24} color="var(--primary)" style={{ 
+                    transform: activeFeature === index ? 'translateX(4px)' : 'none',
+                    transition: 'transform 300ms ease'
+                  }} />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </section>
@@ -413,15 +451,25 @@ export default function LandingPage() {
       {/* ── FOOTER ── */}
       <footer style={{
         borderTop: '1px solid var(--hairline)',
-        padding: '2rem 1.5rem',
+        padding: '3rem 1.5rem',
+        background: 'var(--bg-surface)',
         textAlign: 'center',
-        color: 'var(--text-muted)',
-        fontSize: '0.9rem',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-          <img src="/logo.png" alt="Arthika" style={{ height: '32px', width: 'auto' }} />
+        <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
+          <img src="/logo.png" alt="Arthika" style={{ height: '32px', width: 'auto', opacity: 0.8 }} />
+          
+          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Link to="/terms" style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', fontWeight: 500, transition: 'color 150ms' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-secondary)'}>Terms & Conditions</Link>
+            <Link to="/privacy" style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', fontWeight: 500, transition: 'color 150ms' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-secondary)'}>Privacy Policy</Link>
+            <Link to="/cookies" style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', fontWeight: 500, transition: 'color 150ms' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-secondary)'}>Cookie Policy</Link>
+          </div>
+
+          <div style={{ width: '100%', height: '1px', background: 'var(--hairline)', margin: '0.5rem 0' }} />
+
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            © {new Date().getFullYear()} Arthika. All rights reserved. <br className="md:hidden" />Smart Shared Finance System · Made for India.
+          </p>
         </div>
-        <p>Smart Shared Finance System · Made for India</p>
       </footer>
 
       <style>{`

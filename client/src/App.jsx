@@ -1,8 +1,9 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { LoadingScreen } from './components/LoadingScreen'
 import { useAuth } from './context/AuthContext'
+import { SplashScreen } from './components/SplashScreen'
 import ProtectedRoute from './routes/ProtectedRoute'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -14,6 +15,9 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 const Register = lazy(() => import('./pages/Register'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const TermsPage = lazy(() => import('./pages/TermsPage'))
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
+const CookiePage = lazy(() => import('./pages/CookiePage'))
 
 function PublicOnlyRoute() {
   const { isAuthenticated, isBootstrapping } = useAuth()
@@ -30,10 +34,16 @@ function PublicOnlyRoute() {
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true)
+
   return (
     <Suspense fallback={<LoadingScreen />}>
+      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
       <Routes>
         <Route element={<LandingPage />} path="/" />
+        <Route element={<TermsPage />} path="/terms" />
+        <Route element={<PrivacyPage />} path="/privacy" />
+        <Route element={<CookiePage />} path="/cookies" />
 
         <Route element={<PublicOnlyRoute />}>
           <Route element={<Login />} path="/login" />
