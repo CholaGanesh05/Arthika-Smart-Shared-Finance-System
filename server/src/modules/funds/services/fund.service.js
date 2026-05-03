@@ -61,6 +61,7 @@ export const contributeToFund = async ({
   userId,
   amount,
   description,
+  date,
 }) => {
   if (!amount || amount <= 0) throw new Error("Invalid amount");
 
@@ -87,6 +88,7 @@ export const contributeToFund = async ({
           user: userId,
           type: "contribution",
           amount: amountInPaise,
+          date: date || new Date(),
           description,
         },
       ],
@@ -127,6 +129,7 @@ export const withdrawFromFund = async ({
   userId,
   amount,
   description,
+  date,
 }) => {
   if (!amount || amount <= 0) throw new Error("Invalid amount");
 
@@ -177,6 +180,7 @@ export const withdrawFromFund = async ({
           user: userId,
           type: "withdrawal",
           amount: amountInPaise,
+          date: date || new Date(),
           description: description.trim(),
         },
       ],
@@ -255,7 +259,7 @@ export const getFundContributions = async (fundId, { type } = {}) => {
 
   const transactions = await FundTransaction.find(filter)
     .populate("user", "name email")
-    .sort({ createdAt: -1 })
+    .sort({ date: -1, createdAt: -1 })
     .lean();
 
   // annotate with rupee values

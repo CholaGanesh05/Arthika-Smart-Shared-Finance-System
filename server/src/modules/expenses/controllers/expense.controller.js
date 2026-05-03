@@ -6,6 +6,17 @@ import {
 } from "../services/expense.service.js";
 import { getGroupBalances } from "../services/balance.service.js";
 
+const handleControllerError = (res, next, error) => {
+  if (typeof next === "function") {
+    return next(error);
+  }
+
+  return res.status(500).json({
+    success: false,
+    message: error?.message || "Server Error",
+  });
+};
+
 
 // ======================
 // FR3.1–FR3.5 — ADD EXPENSE
@@ -46,7 +57,7 @@ export const addExpenseController = async (req, res, next) => {
       data: expense,
     });
   } catch (error) {
-    next(error);
+    return handleControllerError(res, next, error);
   }
 };
 
@@ -66,7 +77,7 @@ export const editExpenseController = async (req, res, next) => {
       data: expense,
     });
   } catch (error) {
-    next(error);
+    return handleControllerError(res, next, error);
   }
 };
 
@@ -85,7 +96,7 @@ export const deleteExpenseController = async (req, res, next) => {
       message: result.message,
     });
   } catch (error) {
-    next(error);
+    return handleControllerError(res, next, error);
   }
 };
 
@@ -114,7 +125,7 @@ export const getGroupExpensesController = async (req, res, next) => {
       data: expenses,
     });
   } catch (error) {
-    next(error);
+    return handleControllerError(res, next, error);
   }
 };
 
@@ -133,6 +144,6 @@ export const getBalancesController = async (req, res, next) => {
       data: balances,
     });
   } catch (error) {
-    next(error);
+    return handleControllerError(res, next, error);
   }
 };

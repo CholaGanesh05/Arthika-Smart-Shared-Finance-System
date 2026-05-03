@@ -82,6 +82,7 @@ export const contributeController = async (req, res, next) => {
       userId:      req.user._id,
       amount:      req.body.amount,
       description: req.body.description,
+      date:        req.body.date,
     });
 
     return res.status(200).json({
@@ -106,6 +107,7 @@ export const withdrawController = async (req, res, next) => {
       userId:      req.user._id,
       amount:      req.body.amount,
       description: req.body.description,
+      date:        req.body.date,
     });
 
     return res.status(200).json({

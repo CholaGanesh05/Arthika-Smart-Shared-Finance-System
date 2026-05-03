@@ -72,6 +72,11 @@ export const validateContribute = [
     .isLength({ max: 200 })
     .withMessage("Description must be at most 200 characters"),
 
+  body("date")
+    .optional()
+    .isISO8601()
+    .withMessage("Date must be a valid ISO datetime"),
+
   handleValidation,
 ];
 
@@ -97,6 +102,11 @@ export const validateWithdraw = [
     .withMessage("A reason/description is mandatory for withdrawals")
     .isLength({ max: 200 })
     .withMessage("Description must be at most 200 characters"),
+
+  body("date")
+    .optional()
+    .isISO8601()
+    .withMessage("Date must be a valid ISO datetime"),
 
   handleValidation,
 ];

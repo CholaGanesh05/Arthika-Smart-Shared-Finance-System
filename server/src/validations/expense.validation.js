@@ -131,6 +131,17 @@ export const settleDebtSchema = z.object({
 
 
 // ======================
+// ADVANCE PAYMENT SCHEMA
+// ======================
+export const recordAdvanceSchema = z.object({
+  toUserId: z.string().min(1, "Recipient is required").optional(),
+  amount: z.coerce.number().positive("Amount must be greater than 0"),
+  date: z.coerce.date().optional(),
+  note: z.string().max(200, "Note must not exceed 200 characters").optional(),
+});
+
+
+// ======================
 // FR6.4 — REVIEW SETTLEMENT SCHEMA
 // ======================
 export const reviewSettlementSchema = z.object({

@@ -53,6 +53,12 @@ const fundTransactionSchema = new mongoose.Schema(
       maxlength: 200,
     },
 
+    date: {
+      type: Date,
+      default: Date.now,
+      index: true,
+    },
+
     // 🔐 withdrawal approvals (future)
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,

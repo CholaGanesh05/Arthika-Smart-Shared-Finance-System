@@ -5,10 +5,18 @@ import Settlement from "../../expenses/models/settlement.model.js";
 import Group from "../../groups/models/group.model.js";
 import { getGroupBalances } from "../../expenses/services/balance.service.js";
 
+const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 // Helper to convert paise integer strictly to Rupee string (e.g. 1050 -> "10.50")
 const toRupees = (paise) => (paise / 100).toFixed(2);
 // Helper to convert to Rupee float for charting libraries (e.g. 1050 -> 10.5)
 const toRupeesFloat = (paise) => Number((paise / 100).toFixed(2));
+const padTwo = (value) => String(value).padStart(2, "0");
+const getMonthKey = (date) => `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}`;
+const getMonthLabel = (date) => `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
+const formatExportDateTime = (date) =>
+  `${padTwo(date.getDate())} ${monthNames[date.getMonth()]} ${date.getFullYear()} ${padTwo(date.getHours())}:${padTwo(date.getMinutes())}`;
 
 // ======================
 // GET GROUP ANALYTICS
@@ -16,206 +24,321 @@ const toRupeesFloat = (paise) => Number((paise / 100).toFixed(2));
 export const buildGroupAnalytics = async (groupId, userId) => {
   if (!mongoose.Types.ObjectId.isValid(groupId)) throw new Error("Invalid group ID");
 
-  const group = await Group.findById(groupId);
+  const group = await Group.findById(groupId).populate("members.user", "name email");
   if (!group) throw new Error("Group not found");
   if (!group.isMember(userId)) throw new Error("Not authorized");
 
-  // 1. Fetch Expenses (sorted for timeline evaluation)
-  const expenses = await Expense.find({ group: groupId }).lean();
+  const memberDirectory = {};
+  group.members.forEach((member) => {
+    const memberId = member.user?._id?.toString?.() || member.user?.toString?.();
+    if (!memberId) return;
 
-  // 2. Aggregate Totals
-  const totalGroupSpendingPaise = expenses.reduce((acc, exp) => acc + exp.amount, 0);
+    memberDirectory[memberId] = {
+      id: memberId,
+      name: member.user?.name || "Unknown",
+      email: member.user?.email || "",
+      role: member.role,
+    };
+  });
+
+  const expenses = await Expense.find({ group: groupId }).lean();
+  const normalizedExpenses = expenses.map((expense) => ({
+    ...expense,
+    analyticsDate: expense.date ? new Date(expense.date) : new Date(expense.createdAt),
+  }));
+
+  const totalGroupSpendingPaise = normalizedExpenses.reduce((acc, expense) => acc + expense.amount, 0);
   const memberCount = group.members.length;
   const averagePerMemberPaise = memberCount > 0 ? Math.round(totalGroupSpendingPaise / memberCount) : 0;
 
-  // 3. Category Breakdown (in Float Rupees for Chart JS)
-  const categoryBreakdownPaise = expenses.reduce((acc, exp) => {
-    const cat = exp.category || "Other";
-    acc[cat] = (acc[cat] || 0) + exp.amount;
+  const categoryBreakdownPaise = normalizedExpenses.reduce((acc, expense) => {
+    const category = expense.category || "Other";
+    acc[category] = (acc[category] || 0) + expense.amount;
     return acc;
   }, {});
 
   const categoryBreakdown = {};
-  for (const cat in categoryBreakdownPaise) {
-    categoryBreakdown[cat] = toRupeesFloat(categoryBreakdownPaise[cat]);
+  for (const category in categoryBreakdownPaise) {
+    categoryBreakdown[category] = toRupeesFloat(categoryBreakdownPaise[category]);
   }
 
-  // 4. Monthly Trend (last 6 months, strictly zero-filled)
-  const monthlyTrend = {};
+  const categoryEntries = Object.entries(categoryBreakdownPaise)
+    .map(([name, amountPaise]) => ({
+      name,
+      amount: toRupeesFloat(amountPaise),
+      share: totalGroupSpendingPaise > 0
+        ? Number(((amountPaise / totalGroupSpendingPaise) * 100).toFixed(1))
+        : 0,
+    }))
+    .sort((left, right) => right.amount - left.amount);
+
   const now = new Date();
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    // LOGIC FLAW FIX: Do NOT use toLocaleString('default') as it breaks identically across Linux/Windows OS locales!
-    const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-    monthlyTrend[key] = 0; // initialize baseline
+  const monthlyTrend = {};
+  for (let i = 5; i >= 0; i -= 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    monthlyTrend[getMonthLabel(date)] = 0;
   }
 
-
-  // 5. Daily Heatmap (last 90 days - FR7.Advanced)
   const dailyHeatmap = {};
-  for (let i = 89; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    const key = d.toISOString().split("T")[0]; // YYYY-MM-DD
-    dailyHeatmap[key] = 0;
+  for (let i = 89; i >= 0; i -= 1) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    dailyHeatmap[date.toISOString().split("T")[0]] = 0;
   }
 
-  // 6. Smart Insights Tracker (FR7.Advanced)
   let userTotalSpendPaise = 0;
   let weekendSpendPaise = 0;
   const userCategoryBreakdown = {};
+  const historicalMonthTotalsPaise = {};
+  const sortedExpenseDates = normalizedExpenses
+    .map((expense) => expense.analyticsDate)
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((left, right) => left - right);
 
-  expenses.forEach((exp) => {
-    // using explicitly tracked expense.date (FR3.1)
-    const expDate = exp.date ? new Date(exp.date) : new Date(exp.createdAt);
-    
-    // Process Monthly Trend
-    const monthKey = `${monthNames[expDate.getMonth()]} ${expDate.getFullYear()}`;
-    if (monthlyTrend[monthKey] !== undefined) {
-      monthlyTrend[monthKey] += exp.amount;
+  normalizedExpenses.forEach((expense) => {
+    const expenseDate = expense.analyticsDate;
+    const monthLabel = getMonthLabel(expenseDate);
+
+    if (monthlyTrend[monthLabel] !== undefined) {
+      monthlyTrend[monthLabel] += expense.amount;
     }
 
-    // Process Daily Heatmap
-    const dayKey = expDate.toISOString().split("T")[0];
+    historicalMonthTotalsPaise[getMonthKey(expenseDate)] = (historicalMonthTotalsPaise[getMonthKey(expenseDate)] || 0) + expense.amount;
+
+    const dayKey = expenseDate.toISOString().split("T")[0];
     if (dailyHeatmap[dayKey] !== undefined) {
-      dailyHeatmap[dayKey] += exp.amount;
+      dailyHeatmap[dayKey] += expense.amount;
     }
 
-    // Process User-Specific Behaviors
-    if (exp.paidBy.toString() === userId) {
-      userTotalSpendPaise += exp.amount;
-      const cat = exp.category || "Other";
-      userCategoryBreakdown[cat] = (userCategoryBreakdown[cat] || 0) + exp.amount;
-      
-      const dayOfWeek = expDate.getDay();
-      if (dayOfWeek === 0 || dayOfWeek === 6) { // 0: Sun, 6: Sat
-         weekendSpendPaise += exp.amount;
+    if (expense.paidBy.toString() === userId) {
+      userTotalSpendPaise += expense.amount;
+      const category = expense.category || "Other";
+      userCategoryBreakdown[category] = (userCategoryBreakdown[category] || 0) + expense.amount;
+
+      const dayOfWeek = expenseDate.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        weekendSpendPaise += expense.amount;
       }
     }
   });
 
-  // Re-map Maps to strict Floats
   for (const month in monthlyTrend) {
     monthlyTrend[month] = toRupeesFloat(monthlyTrend[month]);
   }
+
   for (const day in dailyHeatmap) {
     dailyHeatmap[day] = toRupeesFloat(dailyHeatmap[day]);
   }
 
-  // Generate Insight Strings
+  const monthlyTrendEntries = Object.entries(monthlyTrend).map(([label, amount]) => ({
+    label,
+    amount,
+  }));
+
+  const historicalMonthEntries = [];
+  if (sortedExpenseDates.length) {
+    let cursor = new Date(sortedExpenseDates[0].getFullYear(), sortedExpenseDates[0].getMonth(), 1);
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    while (cursor <= currentMonthStart) {
+      const monthKey = getMonthKey(cursor);
+      historicalMonthEntries.push({
+        key: monthKey,
+        label: getMonthLabel(cursor),
+        amountPaise: historicalMonthTotalsPaise[monthKey] || 0,
+      });
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+    }
+  }
+
   const smartInsights = [];
-  
   if (userTotalSpendPaise > 0) {
-    // Insight A: Dominance
-    const userPercent = totalGroupSpendingPaise > 0 ? Math.round((userTotalSpendPaise / totalGroupSpendingPaise) * 100) : 0;
+    const userPercent = totalGroupSpendingPaise > 0
+      ? Math.round((userTotalSpendPaise / totalGroupSpendingPaise) * 100)
+      : 0;
     smartInsights.push(`You account for **${userPercent}%** of the total group spending.`);
 
-    // Insight B: Top Category detection
-    let topCat = "Other";
-    let maxCatVal = 0;
-    for (const cat in userCategoryBreakdown) {
-      if (userCategoryBreakdown[cat] > maxCatVal) {
-        maxCatVal = userCategoryBreakdown[cat];
-        topCat = cat;
+    let topCategory = "Other";
+    let maxCategoryValue = 0;
+    for (const category in userCategoryBreakdown) {
+      if (userCategoryBreakdown[category] > maxCategoryValue) {
+        maxCategoryValue = userCategoryBreakdown[category];
+        topCategory = category;
       }
     }
-    smartInsights.push(`Your highest spending is on **${topCat}** at ₹${toRupees(maxCatVal)}.`);
 
-    // Insight C: Weekend vs Weekday behavior
+    smartInsights.push(`Your highest spending is on **${topCategory}** at \u20b9${toRupees(maxCategoryValue)}.`);
+
     const weekendRatio = weekendSpendPaise / userTotalSpendPaise;
     if (weekendRatio > 0.6) {
       smartInsights.push(`You spend heavily on weekends (**${Math.round(weekendRatio * 100)}%** of your total spending).`);
     } else if (weekendRatio < 0.2) {
-      smartInsights.push(`You are a highly structured weekday spender.`);
+      smartInsights.push("You are a highly structured weekday spender.");
     }
   } else {
     smartInsights.push("You haven't recorded any personal expenditures yet.");
   }
 
+  const outstandingBalances = (await getGroupBalances(groupId, userId))
+    .sort((left, right) => (Number(right.amount) || 0) - (Number(left.amount) || 0));
 
-  // 7. FR7.1: Outstanding Balances
-  const outstandingBalances = await getGroupBalances(groupId, userId);
-
-  // ==========================================
-  // LEVEL 3: PREDICTIVE TOP 1% ML/MATH MODELS
-  // ==========================================
-
-  // 8. Anomaly Detection (Standard Deviation Algorithm)
-  let meanPaise = expenses.length > 0 ? (totalGroupSpendingPaise / expenses.length) : 0;
-  let varianceSum = 0;
-  expenses.forEach(e => {
-    varianceSum += Math.pow(e.amount - meanPaise, 2);
+  const memberNetPaise = {};
+  Object.values(memberDirectory).forEach((member) => {
+    memberNetPaise[member.id] = 0;
   });
-  const stdDevPaise = expenses.length > 0 ? Math.sqrt(varianceSum / expenses.length) : 0;
-  
-  const anomalies = [];
-  const anomalyThresholdPaise = meanPaise + (2 * stdDevPaise); // > +2 Sigmas = Anomaly
-  // Require minimum 500 rupees to avoid flagging small deviances
-  const minimumThresholdPaise = Math.max(anomalyThresholdPaise, 50000); 
 
-  expenses.forEach(e => {
-    if (e.amount > minimumThresholdPaise) {
-      const expDate = e.date ? new Date(e.date) : new Date(e.createdAt);
+  outstandingBalances.forEach((balance) => {
+    const fromId = balance.from.id;
+    const toId = balance.to.id;
+    const amountPaise = Number(balance.amount) || 0;
+
+    if (memberNetPaise[fromId] === undefined) memberNetPaise[fromId] = 0;
+    if (memberNetPaise[toId] === undefined) memberNetPaise[toId] = 0;
+
+    memberNetPaise[fromId] -= amountPaise;
+    memberNetPaise[toId] += amountPaise;
+  });
+
+  const memberNetBalances = Object.entries(memberNetPaise)
+    .map(([memberId, amountPaise]) => ({
+      id: memberId,
+      name: memberDirectory[memberId]?.name || "Unknown",
+      role: memberDirectory[memberId]?.role || "member",
+      netAmount: toRupeesFloat(amountPaise),
+      direction: amountPaise > 0 ? "owed" : amountPaise < 0 ? "owes" : "settled",
+    }))
+    .sort((left, right) => Math.abs(right.netAmount) - Math.abs(left.netAmount));
+
+  const meanPaise = normalizedExpenses.length > 0 ? (totalGroupSpendingPaise / normalizedExpenses.length) : 0;
+  let varianceSum = 0;
+  normalizedExpenses.forEach((expense) => {
+    varianceSum += Math.pow(expense.amount - meanPaise, 2);
+  });
+  const stdDevPaise = normalizedExpenses.length > 0 ? Math.sqrt(varianceSum / normalizedExpenses.length) : 0;
+
+  const anomalies = [];
+  const anomalyThresholdPaise = meanPaise + (2 * stdDevPaise);
+  const minimumThresholdPaise = Math.max(anomalyThresholdPaise, 50000);
+
+  normalizedExpenses.forEach((expense) => {
+    if (expense.amount > minimumThresholdPaise) {
       anomalies.push({
-        title: e.title || e.description || "Expense",
-        amountFloat: toRupeesFloat(e.amount),
-        dateKey: expDate.toISOString().split("T")[0],
-        reason: `Exceeds the statistical boundary (μ+2σ)`
+        title: expense.title || expense.description || "Expense",
+        amountFloat: toRupeesFloat(expense.amount),
+        dateKey: expense.analyticsDate.toISOString().split("T")[0],
+        reason: "Exceeds the normal size band for this group",
       });
     }
   });
+  anomalies.sort((left, right) => right.amountFloat - left.amountFloat);
 
-  // 9. Forecasting (Group Run-rate vs Simple Moving Average)
   let forecastNextMonthFloat = null;
-  let forecastMessage = "Insufficient data to forecast.";
+  let forecastMessage = "Add a bit more history before relying on a forecast.";
+  let forecastConfidence = "low";
+  let forecastModel = "insufficient-data";
+  let forecastRange = null;
+  let forecastBasis = null;
 
-  if (expenses.length > 0) {
-    let earliestDate = new Date();
-    expenses.forEach(e => {
-        const d = e.date ? new Date(e.date) : new Date(e.createdAt);
-        if (d < earliestDate) earliestDate = d;
-    });
+  if (sortedExpenseDates.length >= 4) {
+    const earliestDate = sortedExpenseDates[0];
+    const daysSinceFirstExpense = Math.max(1, (now - earliestDate) / (1000 * 60 * 60 * 24));
+    const recent30DayCutoff = new Date(now.getTime() - (29 * 24 * 60 * 60 * 1000));
+    const recent30DaySpendPaise = normalizedExpenses.reduce(
+      (sum, expense) => sum + (expense.analyticsDate >= recent30DayCutoff ? expense.amount : 0),
+      0
+    );
+    const closedMonthEntries = historicalMonthEntries.length > 1 ? historicalMonthEntries.slice(0, -1) : [];
+    const recentClosedMonths = closedMonthEntries.slice(-3);
+    const recentClosedValues = recentClosedMonths.map((entry) => entry.amountPaise);
+    const recentClosedAveragePaise = recentClosedValues.length
+      ? recentClosedValues.reduce((sum, amount) => sum + amount, 0) / recentClosedValues.length
+      : 0;
+    const closedVariance = recentClosedValues.length > 1
+      ? recentClosedValues.reduce((sum, amount) => sum + Math.pow(amount - recentClosedAveragePaise, 2), 0) / recentClosedValues.length
+      : 0;
+    const closedVolatilityPaise = Math.sqrt(closedVariance);
+    const volatilityRatio = recentClosedAveragePaise > 0 ? closedVolatilityPaise / recentClosedAveragePaise : 0.55;
 
-    const daysSinceFirstExpense = Math.max(1, (new Date() - earliestDate) / (1000 * 60 * 60 * 24));
+    forecastBasis = {
+      recent30DaySpend: toRupeesFloat(recent30DaySpendPaise),
+      recentClosedAverage: toRupeesFloat(recentClosedAveragePaise),
+      volatility: Number(volatilityRatio.toFixed(2)),
+      daysSinceFirstExpense: Math.round(daysSinceFirstExpense),
+      monthsUsed: recentClosedMonths.map((entry) => ({
+        label: entry.label,
+        amount: toRupeesFloat(entry.amountPaise),
+      })),
+    };
 
-    if (daysSinceFirstExpense < 30) {
-      // New User / New Group: Calculate current daily run-rate and project out to 30 days
-      const dailyRunRatePaise = totalGroupSpendingPaise / daysSinceFirstExpense;
-      forecastNextMonthFloat = toRupeesFloat(dailyRunRatePaise * 30);
-      forecastMessage = `Projected based on your current run-rate (group is only ${Math.round(daysSinceFirstExpense)} days old).`;
+    if (daysSinceFirstExpense < 7) {
+      forecastMessage = "The group is too new for a stable forecast. Add at least a week of dated transactions.";
+    } else if (recentClosedMonths.length < 2 || daysSinceFirstExpense < 60 || normalizedExpenses.length < 8) {
+      const baseRunRatePaise = recent30DaySpendPaise > 0
+        ? recent30DaySpendPaise
+        : (totalGroupSpendingPaise / daysSinceFirstExpense) * 30;
+
+      forecastNextMonthFloat = toRupeesFloat(baseRunRatePaise);
+      forecastConfidence = "low";
+      forecastModel = "recent-run-rate";
+      forecastMessage = "This beta forecast leans on the latest pace because there is not enough closed-month history yet.";
     } else {
-      // Legacy Group: Standard 3-Month Moving Average
-      const monthlyKeys = Object.keys(monthlyTrend); 
-      const last3Months = monthlyKeys.slice(-3).map(k => monthlyTrend[k]);
-      forecastNextMonthFloat = Number(((last3Months[0] + last3Months[1] + last3Months[2]) / 3).toFixed(2));
-      forecastMessage = "Based on your 3-month historical moving average.";
+      const recentWeight = recent30DaySpendPaise > 0 ? 0.4 : 0;
+      const closedWeight = 1 - recentWeight;
+      const blendedForecastPaise = (recentClosedAveragePaise * closedWeight) + (recent30DaySpendPaise * recentWeight);
+
+      forecastNextMonthFloat = toRupeesFloat(blendedForecastPaise);
+
+      if (
+        recentClosedMonths.length >= 3 &&
+        daysSinceFirstExpense >= 120 &&
+        normalizedExpenses.length >= 12 &&
+        volatilityRatio < 0.35
+      ) {
+        forecastConfidence = "high";
+      } else if (volatilityRatio < 0.55) {
+        forecastConfidence = "medium";
+      } else {
+        forecastConfidence = "low";
+      }
+
+      forecastModel = "blended-trend";
+      forecastMessage = "This beta forecast blends recent 30-day pace with closed-month averages so one spike does not drive the whole estimate.";
+    }
+
+    if (forecastNextMonthFloat !== null) {
+      const volatilitySpread = clamp(0.14 + (volatilityRatio * 0.28), 0.14, 0.34);
+      const spread =
+        forecastConfidence === "high"
+          ? Math.max(0.1, volatilitySpread - 0.04)
+          : forecastConfidence === "medium"
+            ? volatilitySpread
+            : Math.min(0.38, volatilitySpread + 0.05);
+
+      forecastRange = {
+        conservative: Number((forecastNextMonthFloat * (1 - spread)).toFixed(2)),
+        expected: forecastNextMonthFloat,
+        stretch: Number((forecastNextMonthFloat * (1 + spread)).toFixed(2)),
+      };
     }
   }
 
-  // 10. Social Graph Centrality (Financial Hub)
   const nodeDegrees = {};
-  outstandingBalances.forEach(b => {
-    const fromId = b.from.id;
-    const toId = b.to.id;
-    if (!nodeDegrees[fromId]) nodeDegrees[fromId] = { name: b.from.name, degree: 0, volume: 0 };
-    if (!nodeDegrees[toId]) nodeDegrees[toId] = { name: b.to.name, degree: 0, volume: 0 };
-    
-    // Increment Node Edges
+  outstandingBalances.forEach((balance) => {
+    const fromId = balance.from.id;
+    const toId = balance.to.id;
+    if (!nodeDegrees[fromId]) nodeDegrees[fromId] = { name: balance.from.name, degree: 0, volume: 0 };
+    if (!nodeDegrees[toId]) nodeDegrees[toId] = { name: balance.to.name, degree: 0, volume: 0 };
+
     nodeDegrees[fromId].degree += 1;
     nodeDegrees[toId].degree += 1;
-    
-    // Accumulate total node Velocity Volume
-    nodeDegrees[fromId].volume += b.amount; 
-    nodeDegrees[toId].volume += b.amount;
+    nodeDegrees[fromId].volume += balance.amount;
+    nodeDegrees[toId].volume += balance.amount;
   });
 
   let financialHub = null;
   let maxScore = -1;
-  for (const id in nodeDegrees) {
-    const node = nodeDegrees[id];
-    // Score heuristically combining Social Nodes connected (weighting 1 link = 1000 rupees volume)
-    const score = (node.degree * 100000) + node.volume; 
+  for (const memberId in nodeDegrees) {
+    const node = nodeDegrees[memberId];
+    const score = (node.degree * 100000) + node.volume;
     if (score > maxScore) {
       maxScore = score;
       financialHub = {
@@ -226,18 +349,73 @@ export const buildGroupAnalytics = async (groupId, userId) => {
     }
   }
 
+  const aiHighlights = [];
+  const aiSuggestions = [];
+
+  if (categoryEntries.length) {
+    aiHighlights.push(`Top category right now is ${categoryEntries[0].name} at \u20b9${categoryEntries[0].amount.toFixed(2)}.`);
+  }
+
+  const largestOpenBalance = outstandingBalances[0];
+  if (largestOpenBalance) {
+    aiHighlights.push(
+      `Largest open balance is ${largestOpenBalance.from.name} owing ${largestOpenBalance.to.name} \u20b9${toRupeesFloat(largestOpenBalance.amount).toFixed(2)}.`
+    );
+  }
+
+  if (forecastRange?.expected !== undefined) {
+    aiHighlights.push(`Expected next-month spend is about \u20b9${forecastRange.expected.toFixed(2)} with ${forecastConfidence} confidence.`);
+  }
+
+  if (financialHub?.name) {
+    aiHighlights.push(`${financialHub.name} sits at the center of the current money flow.`);
+  }
+
+  if (anomalies.length) {
+    aiSuggestions.push(`Review "${anomalies[0].title}" because it stands out from the group's normal expense size.`);
+  }
+
+  if (categoryEntries[0]?.share >= 50) {
+    aiSuggestions.push(`More than half of the spend is in ${categoryEntries[0].name}. Track whether that category needs a separate budget cap.`);
+  }
+
+  if (forecastConfidence === "low") {
+    aiSuggestions.push("Forecast confidence is still low. Keep recording dated transactions before using it for tight planning.");
+  }
+
+  if (!aiSuggestions.length) {
+    aiSuggestions.push("Spending is fairly even right now. Keep recording dates and categories to unlock stronger pattern detection.");
+  }
+
+  const aiAssistant = {
+    provider: "rule-based",
+    mode: "basic",
+    readiness: "Groq-ready",
+    summary: aiHighlights[0] || "Basic analytics is active. Connect Groq later for deeper narrative insights.",
+    highlights: aiHighlights,
+    suggestions: aiSuggestions,
+  };
+
   return {
     totalGroupSpending: toRupees(totalGroupSpendingPaise),
     averagePerMember: toRupees(averagePerMemberPaise),
     categoryBreakdown,
+    categoryEntries,
     monthlyTrend,
-    dailyHeatmap, // Add explicitly for UI Heatmap grid
-    smartInsights, // Add explicit string array for AI Summary Cards
-    anomalies, // D3 plotting anomalies
-    forecastNextMonth: forecastNextMonthFloat, // Level 3 Forecast
-    forecastMessage, // Descriptive context for UI
-    financialHub, // Level 3 Graph Centrality
-    outstandingBalances, // inherited structured array
+    monthlyTrendEntries,
+    dailyHeatmap,
+    smartInsights,
+    anomalies,
+    forecastNextMonth: forecastNextMonthFloat,
+    forecastMessage,
+    forecastConfidence,
+    forecastModel,
+    forecastRange,
+    forecastBasis,
+    financialHub,
+    outstandingBalances,
+    memberNetBalances,
+    aiAssistant,
   };
 };
 
@@ -251,33 +429,31 @@ export const buildMemberAnalytics = async (groupId, userId) => {
   if (!group) throw new Error("Group not found");
   if (!group.isMember(userId)) throw new Error("Not authorized");
 
-  // 1. Leaderboard 
   const expenses = await Expense.find({ group: groupId }).populate("paidBy", "name email").lean();
   const contributionsPaise = {};
 
-  expenses.forEach(exp => {
-    const payerId = exp.paidBy._id.toString();
-    const payerName = exp.paidBy.name;
+  expenses.forEach((expense) => {
+    const payerId = expense.paidBy._id.toString();
+    const payerName = expense.paidBy.name;
     if (!contributionsPaise[payerId]) {
       contributionsPaise[payerId] = { name: payerName, totalPaid: 0 };
     }
-    contributionsPaise[payerId].totalPaid += exp.amount;
+    contributionsPaise[payerId].totalPaid += expense.amount;
   });
 
   const leaderboard = Object.values(contributionsPaise)
-    .sort((a, b) => b.totalPaid - a.totalPaid)
-    .map(member => ({
+    .sort((left, right) => right.totalPaid - left.totalPaid)
+    .map((member) => ({
       name: member.name,
-      totalPaid: toRupees(member.totalPaid)
+      totalPaid: toRupees(member.totalPaid),
     }));
 
-  // 2. Personal Balance Summary (Net + Explicit Pairwise mappings)
   const ledger = await Ledger.find({ group: groupId }).populate("from to", "name").lean();
   let totalOwePaise = 0;
   let totalOwedPaise = 0;
   const pairwiseMap = {};
 
-  ledger.forEach(entry => {
+  ledger.forEach((entry) => {
     const fromId = entry.from._id.toString();
     const toId = entry.to._id.toString();
 
@@ -286,7 +462,7 @@ export const buildMemberAnalytics = async (groupId, userId) => {
       if (!pairwiseMap[toId]) pairwiseMap[toId] = { name: entry.to.name, iOwePaise: 0, theyOweMePaise: 0 };
       pairwiseMap[toId].iOwePaise += entry.amount;
     }
-    
+
     if (toId === userId) {
       totalOwedPaise += entry.amount;
       if (!pairwiseMap[fromId]) pairwiseMap[fromId] = { name: entry.from.name, iOwePaise: 0, theyOweMePaise: 0 };
@@ -294,14 +470,14 @@ export const buildMemberAnalytics = async (groupId, userId) => {
     }
   });
 
-  const pairwiseBalances = Object.values(pairwiseMap).map(member => {
+  const pairwiseBalances = Object.values(pairwiseMap).map((member) => {
     const net = member.theyOweMePaise - member.iOwePaise;
     return {
       name: member.name,
       iOwe: toRupees(member.iOwePaise),
       theyOweMe: toRupees(member.theyOweMePaise),
       netBalance: toRupees(net),
-      isOwed: net > 0
+      isOwed: net > 0,
     };
   });
 
@@ -311,8 +487,8 @@ export const buildMemberAnalytics = async (groupId, userId) => {
       totalOwe: toRupees(totalOwePaise),
       totalOwed: toRupees(totalOwedPaise),
       netBalance: toRupees(totalOwedPaise - totalOwePaise),
-      pairwiseBalances
-    }
+      pairwiseBalances,
+    },
   };
 };
 
@@ -337,54 +513,53 @@ export const generateGroupCSVData = async (groupId, userId) => {
 
   const timeline = [];
 
-  // Map Expenses
-  expenses.forEach(exp => {
-    const expDate = exp.date ? new Date(exp.date) : new Date(exp.createdAt);
-    const rawDesc = exp.title || exp.description || 'Expense';
-    const rawUser = exp.paidBy?.name || 'Unknown';
+  expenses.forEach((expense) => {
+    const expenseDate = expense.date ? new Date(expense.date) : new Date(expense.createdAt);
+    const rawDescription = expense.title || expense.description || "Expense";
+    const rawUser = expense.paidBy?.name || "Unknown";
     timeline.push({
-      dateObj: expDate,
-      dateString: expDate.toISOString().split("T")[0],
+      dateObj: expenseDate,
+      timestampString: formatExportDateTime(expenseDate),
       type: "Expense",
-      description: `"${rawDesc.replace(/"/g, '""')}"`, // LOGIC FLAW FIX: Safely escape CSV internal quotes!
-      category: exp.category || "Other",
+      description: `"${rawDescription.replace(/"/g, '""')}"`,
+      category: expense.category || "Other",
       userA: `"${rawUser.replace(/"/g, '""')}"`,
-      userB: '("Group Split")',
-      amount: toRupees(exp.amount),
+      userB: '"Group Split"',
+      amount: toRupees(expense.amount),
     });
   });
 
-  // Map Settlements
-  settlements.forEach(settle => {
-    const setDate = settle.date ? new Date(settle.date) : new Date(settle.createdAt);
-    const rawRef = settle.reference || 'Reimbursement';
-    const rawFrom = settle.from?.name || 'Unknown';
-    const rawTo = settle.to?.name || 'Unknown';
+  settlements.forEach((settlement) => {
+    const settlementDate = settlement.date ? new Date(settlement.date) : new Date(settlement.createdAt);
+    const rawReference = settlement.reference || "Reimbursement";
+    const rawFrom = settlement.from?.name || "Unknown";
+    const rawTo = settlement.to?.name || "Unknown";
     timeline.push({
-      dateObj: setDate,
-      dateString: setDate.toISOString().split("T")[0],
-      type: `Settlement (${settle.method.toUpperCase()})`,
-      description: `"${rawRef.replace(/"/g, '""')}"`,
+      dateObj: settlementDate,
+      timestampString: formatExportDateTime(settlementDate),
+      type: `Settlement (${settlement.method.toUpperCase()})`,
+      description: `"${rawReference.replace(/"/g, '""')}"`,
       category: "Settlement",
       userA: `"${rawFrom.replace(/"/g, '""')}"`,
       userB: `"${rawTo.replace(/"/g, '""')}"`,
-      amount: toRupees(settle.amount),
+      amount: toRupees(settlement.amount),
     });
   });
 
-  // Sort Descending
-  timeline.sort((a, b) => b.dateObj - a.dateObj);
+  timeline.sort((left, right) => right.dateObj - left.dateObj);
 
-  const csvHeaders = "Date,Type,Description,Category,From (Paid By),To (Payee),Amount\n";
-  const csvRows = timeline.map(row => 
-    `${row.dateString},${row.type},${row.description},${row.category},${row.userA},${row.userB},${row.amount}`
-  ).join("\n");
+  const csvHeaders = "Timestamp,Type,Description,Category,From (Paid By),To (Payee),Amount\n";
+  const csvRows = timeline
+    .map((row) =>
+      `"${row.timestampString}",${row.type},${row.description},${row.category},${row.userA},${row.userB},${row.amount}`
+    )
+    .join("\n");
 
   return csvHeaders + csvRows;
 };
 
 // ======================
-// EXPORT GROUP TRANSACTIONS — PDF (Architecture Diagram: pdfkit)
+// EXPORT GROUP TRANSACTIONS - PDF
 // Returns a Buffer of the generated PDF
 // ======================
 export const generateGroupPDFBuffer = async (groupId, userId) => {
@@ -396,16 +571,15 @@ export const generateGroupPDFBuffer = async (groupId, userId) => {
 
   const expenses = await Expense.find({ group: groupId })
     .populate("paidBy", "name")
-    .sort({ date: -1 })
+    .sort({ date: -1, createdAt: -1 })
     .lean();
 
   const settlements = await Settlement.find({ group: groupId, status: { $ne: "disputed" } })
     .populate("from", "name")
     .populate("to", "name")
-    .sort({ date: -1 })
+    .sort({ date: -1, createdAt: -1 })
     .lean();
 
-  // Dynamically import pdfkit (ESM-compatible)
   const { default: PDFDocument } = await import("pdfkit");
 
   return new Promise((resolve, reject) => {
@@ -416,13 +590,10 @@ export const generateGroupPDFBuffer = async (groupId, userId) => {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    // ======================
-    // HEADER
-    // ======================
     doc
       .fontSize(22)
       .font("Helvetica-Bold")
-      .text("Arthika — Group Finance Report", { align: "center" });
+      .text("Arthika - Group Finance Report", { align: "center" });
 
     doc.moveDown(0.3);
     doc
@@ -439,20 +610,16 @@ export const generateGroupPDFBuffer = async (groupId, userId) => {
     doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#cccccc").stroke();
     doc.moveDown(0.5);
 
-    // ======================
-    // EXPENSES TABLE
-    // ======================
     doc.fontSize(13).fillColor("#000000").font("Helvetica-Bold").text("Expenses");
     doc.moveDown(0.4);
 
-    // Table header
     doc.fontSize(9).font("Helvetica-Bold").fillColor("#444444");
-    const col = { date: 40, title: 100, category: 250, paidBy: 340, amount: 470 };
-    doc.text("Date",     col.date,    doc.y, { width: 55 });
-    doc.text("Title",    col.title,   doc.y - doc.currentLineHeight(), { width: 145 });
-    doc.text("Category", col.category,doc.y - doc.currentLineHeight(), { width: 85 });
-    doc.text("Paid By",  col.paidBy,  doc.y - doc.currentLineHeight(), { width: 125 });
-    doc.text("Amount",   col.amount,  doc.y - doc.currentLineHeight(), { width: 80, align: "right" });
+    const expenseColumns = { date: 40, title: 138, category: 284, paidBy: 360, amount: 470 };
+    doc.text("Date & Time", expenseColumns.date, doc.y, { width: 92 });
+    doc.text("Title", expenseColumns.title, doc.y - doc.currentLineHeight(), { width: 136 });
+    doc.text("Category", expenseColumns.category, doc.y - doc.currentLineHeight(), { width: 72 });
+    doc.text("Paid By", expenseColumns.paidBy, doc.y - doc.currentLineHeight(), { width: 98 });
+    doc.text("Amount", expenseColumns.amount, doc.y - doc.currentLineHeight(), { width: 80, align: "right" });
     doc.moveDown(0.2);
     doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#dddddd").stroke();
     doc.moveDown(0.2);
@@ -460,77 +627,79 @@ export const generateGroupPDFBuffer = async (groupId, userId) => {
     doc.font("Helvetica").fillColor("#000000").fontSize(9);
     let totalPaise = 0;
 
-    for (const exp of expenses) {
+    for (const expense of expenses) {
       const y = doc.y;
-      const expDate = exp.date ? new Date(exp.date) : new Date(exp.createdAt);
-      const dateStr = expDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
-      const amtStr = `\u20b9${(exp.amount / 100).toFixed(2)}`;
-      totalPaise += exp.amount;
+      const expenseDate = expense.date ? new Date(expense.date) : new Date(expense.createdAt);
+      const dateString = formatExportDateTime(expenseDate);
+      const amountString = `\u20b9${(expense.amount / 100).toFixed(2)}`;
+      totalPaise += expense.amount;
 
-      doc.text(dateStr,                     col.date,     y, { width: 55 });
-      doc.text(exp.title || "-",             col.title,    y, { width: 145 });
-      doc.text(exp.category || "Other",      col.category, y, { width: 85 });
-      doc.text(exp.paidBy?.name || "?",      col.paidBy,   y, { width: 125 });
-      doc.text(amtStr,                       col.amount,   y, { width: 80, align: "right" });
+      doc.text(dateString, expenseColumns.date, y, { width: 92 });
+      doc.text(expense.title || "-", expenseColumns.title, y, { width: 136 });
+      doc.text(expense.category || "Other", expenseColumns.category, y, { width: 72 });
+      doc.text(expense.paidBy?.name || "?", expenseColumns.paidBy, y, { width: 98 });
+      doc.text(amountString, expenseColumns.amount, y, { width: 80, align: "right" });
       doc.moveDown(0.5);
 
-      // Page overflow guard
-      if (doc.y > 750) { doc.addPage(); }
+      if (doc.y > 750) {
+        doc.addPage();
+      }
     }
 
     doc.moveDown(0.2);
     doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#cccccc").stroke();
     doc.moveDown(0.3);
-    doc.font("Helvetica-Bold").fontSize(10)
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(10)
       .text(`Total Group Spending: \u20b9${(totalPaise / 100).toFixed(2)}`, { align: "right" });
 
     doc.moveDown(1.5);
 
-    // ======================
-    // SETTLEMENTS TABLE
-    // ======================
     if (settlements.length > 0) {
-      if (doc.y > 650) doc.addPage();
+      if (doc.y > 650) {
+        doc.addPage();
+      }
 
       doc.fontSize(13).font("Helvetica-Bold").fillColor("#000000").text("Settlements");
       doc.moveDown(0.4);
 
       doc.fontSize(9).font("Helvetica-Bold").fillColor("#444444");
-      doc.text("Date",   40,  doc.y, { width: 80 });
-      doc.text("From",   125, doc.y - doc.currentLineHeight(), { width: 140 });
-      doc.text("To",     270, doc.y - doc.currentLineHeight(), { width: 140 });
-      doc.text("Method", 415, doc.y - doc.currentLineHeight(), { width: 60 });
-      doc.text("Amount", 475, doc.y - doc.currentLineHeight(), { width: 80, align: "right" });
+      doc.text("Date & Time", 40, doc.y, { width: 105 });
+      doc.text("From", 150, doc.y - doc.currentLineHeight(), { width: 112 });
+      doc.text("To", 270, doc.y - doc.currentLineHeight(), { width: 112 });
+      doc.text("Method", 390, doc.y - doc.currentLineHeight(), { width: 60 });
+      doc.text("Amount", 455, doc.y - doc.currentLineHeight(), { width: 100, align: "right" });
       doc.moveDown(0.2);
       doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#dddddd").stroke();
       doc.moveDown(0.2);
 
       doc.font("Helvetica").fillColor("#000000").fontSize(9);
 
-      for (const s of settlements) {
+      for (const settlement of settlements) {
         const y = doc.y;
-        const sDate = s.date ? new Date(s.date) : new Date(s.createdAt);
-        const dateStr = sDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+        const settlementDate = settlement.date ? new Date(settlement.date) : new Date(settlement.createdAt);
+        const dateString = formatExportDateTime(settlementDate);
 
-        doc.text(dateStr,              40,  y, { width: 80 });
-        doc.text(s.from?.name || "?", 125, y, { width: 140 });
-        doc.text(s.to?.name || "?",   270, y, { width: 140 });
-        doc.text(s.method?.toUpperCase() || "CASH", 415, y, { width: 60 });
-        doc.text(`\u20b9${(s.amount / 100).toFixed(2)}`, 475, y, { width: 80, align: "right" });
+        doc.text(dateString, 40, y, { width: 105 });
+        doc.text(settlement.from?.name || "?", 150, y, { width: 112 });
+        doc.text(settlement.to?.name || "?", 270, y, { width: 112 });
+        doc.text(settlement.method?.toUpperCase() || "CASH", 390, y, { width: 60 });
+        doc.text(`\u20b9${(settlement.amount / 100).toFixed(2)}`, 455, y, { width: 100, align: "right" });
         doc.moveDown(0.5);
 
-        if (doc.y > 750) { doc.addPage(); }
+        if (doc.y > 750) {
+          doc.addPage();
+        }
       }
     }
 
-    // ======================
-    // FOOTER
-    // ======================
     doc.moveDown(2);
-    doc.fontSize(8).fillColor("#aaaaaa")
-      .text("Generated by Arthika — Smart Shared Finance System", { align: "center" });
+    doc
+      .fontSize(8)
+      .fillColor("#aaaaaa")
+      .text("Generated by Arthika - Smart Shared Finance System", { align: "center" });
 
     doc.end();
   });
 };
-

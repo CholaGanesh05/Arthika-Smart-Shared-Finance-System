@@ -373,7 +373,7 @@ export const getSettlementHistory = async (groupId, userId) => {
   const settlements = await Settlement.find({ group: groupId })
     .populate("from", "name email")
     .populate("to", "name email")
-    .sort({ createdAt: -1 })
+    .sort({ date: -1, createdAt: -1 })
     .lean();
 
   // Map amounts to also include rupees string

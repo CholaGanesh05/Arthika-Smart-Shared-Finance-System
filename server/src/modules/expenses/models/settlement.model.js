@@ -36,13 +36,17 @@ const settlementSchema = new mongoose.Schema(
 
     method: {
       type: String,
-      enum: ["cash", "upi"],
+      enum: ["cash", "upi", "advance"],
       default: "cash",
     },
 
     reference: {
       type: String, // UPI txn id (optional)
       trim: true,
+    },
+    note: {
+      type: String,
+      maxlength: 200,
     },
 
     date: {

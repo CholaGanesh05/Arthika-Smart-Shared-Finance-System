@@ -9,6 +9,7 @@ import { uploadToCloudinary } from "../../../infrastructure/storage/cloudinary.j
 import {
   addExpenseSchema,
   editExpenseSchema,
+  recordAdvanceSchema,
   settleDebtSchema,
   reviewSettlementSchema,
 } from "../../../validations/expense.validation.js";
@@ -29,6 +30,12 @@ import {
   getSettlementHistoryController,
   reviewSettlementController,
 } from "../controllers/settlement.controller.js";
+
+// Advance Payment controllers
+import {
+  recordAdvanceController,
+  getAdvanceController,
+} from "../controllers/advancePayment.controller.js";
 
 console.log("✅ Expense routes loaded");
 
@@ -90,6 +97,22 @@ router.post("/upload-receipt", protect, (req, res, next) => {
     }
   });
 });
+
+
+// ======================
+// ADVANCE PAYMENTS — must be before /:groupId to avoid shadowing
+// ======================
+
+// Record advance payment (member → selected member, defaults to owner)
+router.post(
+  "/:groupId/advance",
+  protect,
+  validate(recordAdvanceSchema),
+  recordAdvanceController
+);
+
+// Get all advance payments for a group
+router.get("/:groupId/advance", protect, getAdvanceController);
 
 
 // ======================

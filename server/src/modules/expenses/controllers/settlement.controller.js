@@ -5,6 +5,17 @@ import {
   reviewSettlement,
 } from "../services/settlement.service.js";
 
+const handleControllerError = (res, next, error) => {
+  if (typeof next === "function") {
+    return next(error);
+  }
+
+  return res.status(500).json({
+    success: false,
+    message: error?.message || "Server Error",
+  });
+};
+
 // ======================
 // SIMPLIFY DEBTS
 // ======================
@@ -20,7 +31,7 @@ export const simplifyDebtsController = async (req, res, next) => {
       data,
     });
   } catch (err) {
-    next(err);
+    return handleControllerError(res, next, err);
   }
 };
 
@@ -47,7 +58,7 @@ export const settleDebtController = async (req, res, next) => {
       message: result.message,
     });
   } catch (err) {
-    next(err);
+    return handleControllerError(res, next, err);
   }
 };
 
@@ -67,7 +78,7 @@ export const reviewSettlementController = async (req, res, next) => {
       data: result.settlement,
     });
   } catch (err) {
-    next(err);
+    return handleControllerError(res, next, err);
   }
 };
 
@@ -86,6 +97,6 @@ export const getSettlementHistoryController = async (req, res, next) => {
       data,
     });
   } catch (err) {
-    next(err);
+    return handleControllerError(res, next, err);
   }
 };
