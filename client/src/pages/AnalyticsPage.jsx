@@ -100,7 +100,7 @@ export default function AnalyticsPage() {
     setError('')
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/analytics/export/${groupId}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/analytics/${groupId}/export`, {
         headers: { Authorization: `Bearer ${token}` },
       })
 
@@ -182,6 +182,10 @@ export default function AnalyticsPage() {
   }
 
   if (error && !analytics) {
+    // Sanitize error: never show raw HTML (e.g. from a 404 Express response)
+    const safeError = error.startsWith('<') || error.length > 200
+      ? 'The analytics service could not be reached. Make sure the server is running.'
+      : error
     return (
       <EmptyState
         action={
@@ -190,7 +194,7 @@ export default function AnalyticsPage() {
             Back to group
           </Link>
         }
-        description={error}
+        description={safeError}
         icon={CircleAlert}
         title="Analytics unavailable"
       />

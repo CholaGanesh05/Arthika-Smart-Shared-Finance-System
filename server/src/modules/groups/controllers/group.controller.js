@@ -9,6 +9,7 @@ import {
   updateMemberRole,
   archiveGroup
 } from "../services/group.service.js";
+import { getActivityLog } from "../services/activityLog.service.js";
 
 
 // ======================
@@ -106,9 +107,11 @@ export const addMemberController = async (req, res) => {
       data: group,
     });
   } catch (error) {
-  res.status(400);
-  throw error;
- }
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 
@@ -227,5 +230,25 @@ export const deleteGroupController = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+};
+
+
+// ======================
+// GET ACTIVITY LOG (FR2.8)
+// ======================
+export const getActivityLogController = async (req, res, next) => {
+  try {
+    const { groupId } = req.params;
+    const group = await (await import("../models/group.model.js")).default.findById(groupId);
+    if (!group) return res.status(404).json({ success: false, message: "Group not found" });
+    if (!group.isMember(req.user._id)) {
+      return res.status(403).json({ success: false, message: "Not authorized" });
+    }
+
+    const logs = await getActivityLog(groupId);
+    res.status(200).json({ success: true, count: logs.length, data: logs });
+  } catch (error) {
+    next(error);
   }
 };

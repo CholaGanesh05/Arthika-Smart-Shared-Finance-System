@@ -20,7 +20,6 @@ import { getInitials } from '../utils/helpers'
 
 const desktopNavigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
-  { to: '/dashboard#groups', label: 'Groups', icon: Users },
   { to: '/settings', label: 'Settings', icon: Settings2 },
 ]
 
@@ -98,7 +97,11 @@ export function AppShell() {
               border: '1px solid var(--glass-border)',
               marginBottom: '0.75rem',
             }}>
-              <div className="avatar" style={{ width: 38, height: 38, borderRadius: 10, fontSize: '0.85rem', flexShrink: 0 }}>{initials}</div>
+              {user?.avatar ? (
+                <img src={user.avatar} alt="Profile" style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, objectFit: 'cover' }} />
+              ) : (
+                <div className="avatar" style={{ width: 38, height: 38, borderRadius: 10, fontSize: '0.85rem', flexShrink: 0 }}>{initials}</div>
+              )}
               <div style={{ minWidth: 0, flex: 1 }}>
                 <p style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name}</p>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</p>
@@ -135,7 +138,11 @@ export function AppShell() {
               <Bell size={18} strokeWidth={1.8} />
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.4rem 0.75rem', borderRadius: 10, border: '1px solid var(--glass-border)', background: 'var(--bg-surface)' }} className="hidden sm:flex">
-              <div className="avatar" style={{ width: 30, height: 30, borderRadius: 8, fontSize: '0.8rem' }}>{initials}</div>
+              {user?.avatar ? (
+                <img src={user.avatar} alt="Profile" style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover' }} />
+              ) : (
+                <div className="avatar" style={{ width: 30, height: 30, borderRadius: 8, fontSize: '0.8rem' }}>{initials}</div>
+              )}
               <div>
                 <p style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>{user?.name}</p>
               </div>

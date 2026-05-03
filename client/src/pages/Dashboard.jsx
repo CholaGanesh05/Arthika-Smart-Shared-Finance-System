@@ -10,7 +10,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { CountUpNumber } from '../components/CountUpNumber'
 import { EmptyState } from '../components/EmptyState'
 import { LoadingScreen } from '../components/LoadingScreen'
@@ -58,11 +58,13 @@ const groupGradients = [
 export default function Dashboard() {
   const { token, user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [groups, setGroups] = useState([])
   const [groupBalances, setGroupBalances] = useState({})
+  const [quickActionModal, setQuickActionModal] = useState(null)
   const [createGroupForm, setCreateGroupForm] = useState({
     name: '',
     description: '',
@@ -118,6 +120,18 @@ export default function Dashboard() {
       cancelled = true
     }
   }, [token])
+
+  // Handle hash scrolling (e.g., from sidebar "Groups" link)
+  useEffect(() => {
+    if (location.hash && !loading) {
+      const id = location.hash.replace('#', '')
+      const element = document.getElementById(id)
+      if (element) {
+        // Small timeout ensures the DOM has settled
+        setTimeout(() => element.scrollIntoView({ behavior: 'smooth' }), 100)
+      }
+    }
+  }, [location.hash, loading])
 
   const groupSummaries = useMemo(
     () =>
@@ -262,9 +276,8 @@ export default function Dashboard() {
 
           <div className="hero-quick-actions">
             {[
-              { img: '/icon_transfer.png', label: 'Send', action: () => document.getElementById('settle-feed')?.scrollIntoView({ behavior: 'smooth' }) },
-              { icon: ArrowDownLeft, label: 'Receive', action: () => document.getElementById('groups-grid')?.scrollIntoView({ behavior: 'smooth' }) },
-              { icon: QrCode, label: 'Scan', action: () => document.getElementById('create-group')?.scrollIntoView({ behavior: 'smooth' }) },
+              { img: '/icon_transfer.png', label: 'Send', action: () => setQuickActionModal('send') },
+              { icon: ArrowDownLeft, label: 'Receive', action: () => setQuickActionModal('receive') },
               { icon: History, label: 'History', action: () => document.getElementById('activity-feed')?.scrollIntoView({ behavior: 'smooth' }) },
             ].map(({ icon: Icon, img, label, action }) => (
               <button className="quick-action-tile" key={label} onClick={action} type="button">
@@ -300,6 +313,50 @@ export default function Dashboard() {
         ) : null}
       </div>
 
+      {quickActionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" style={{ backdropFilter: 'blur(8px)' }}>
+          <div className="fin-card w-full max-w-md bg-[var(--bg-surface)] shadow-[var(--shadow-glow-blue)] relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-[var(--glass-border)] p-5">
+              <h3 className="font-display text-xl text-[var(--text-primary)]">
+                {quickActionModal === 'send' ? 'Select group to send' : 'Select group to receive'}
+              </h3>
+              <button className="btn btn-ghost btn-icon !rounded-full" onClick={() => setQuickActionModal(null)} type="button">
+                <Plus className="rotate-45" size={20} strokeWidth={2} />
+              </button>
+            </div>
+            <div className="grid gap-3 p-5 max-h-[60vh] overflow-y-auto">
+              {groups.length ? (
+                groups.map((group) => {
+                  const groupId = getEntityId(group)
+                  return (
+                    <button
+                      className="flex w-full items-center gap-4 rounded-[20px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.02)] p-4 text-left transition hover:bg-[rgba(255,255,255,0.06)]"
+                      key={groupId}
+                      onClick={() => {
+                        setQuickActionModal(null)
+                        navigate(`/groups/${groupId}`)
+                      }}
+                      type="button"
+                    >
+                      <div className="avatar h-12 w-12 rounded-xl text-lg">{getInitials(group.name)}</div>
+                      <div className="min-w-0 flex-1">
+                        <strong className="block truncate font-cabinet text-sm text-[var(--text-primary)]">{group.name}</strong>
+                        <p className="truncate text-xs text-[var(--text-secondary)]">Click to open workspace</p>
+                      </div>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(255,255,255,0.05)]">
+                        <ArrowUpRight color="var(--text-secondary)" size={16} />
+                      </div>
+                    </button>
+                  )
+                })
+              ) : (
+                <EmptyState description="Create or join a group first." icon={Users} title="No active groups" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <SectionCard
           actions={
@@ -313,7 +370,7 @@ export default function Dashboard() {
           subtitle="Shared groups stay visible, color-coded, and easy to open."
           title="My Groups"
         >
-          <div className="stagger-grid grid gap-4 md:grid-cols-2" id="groups-grid">
+          <div className="stagger-grid grid gap-4 md:grid-cols-2 scroll-mt-24" id="groups">
             {groupSummaries.length ? (
               groupSummaries.map((group, index) => (
                 <article

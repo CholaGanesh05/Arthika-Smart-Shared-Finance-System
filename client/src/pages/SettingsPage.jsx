@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Camera,
@@ -29,6 +29,11 @@ export default function SettingsPage() {
   const [pwdSubmitting, setPwdSubmitting] = useState(false)
   const [pwdNotice, setPwdNotice] = useState('')
   const [pwdError, setPwdError] = useState('')
+
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarError, setAvatarError] = useState('')
+  const avatarInputRef = useRef(null)
+  const [photoMenuOpen, setPhotoMenuOpen] = useState(false)
 
   const [groupActioning, setGroupActioning] = useState(false)
   const [groupError, setGroupError] = useState('')
@@ -76,6 +81,45 @@ export default function SettingsPage() {
       setPwdError(submitError.message)
     } finally {
       setPwdSubmitting(false)
+    }
+  }
+
+  async function handleAvatarChange(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Client-side validation: JPEG/PNG only, max 5MB
+    if (!['image/jpeg', 'image/jpg', 'image/png'].includes(file.type)) {
+      setAvatarError('Only JPEG or PNG images are allowed.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('Image must be smaller than 5 MB.')
+      return
+    }
+
+    setAvatarError('')
+    setAvatarUploading(true)
+    try {
+      await api.uploadAvatar(token, file)
+      // Reload to refresh the user context with the new Cloudinary avatar URL
+      window.location.reload()
+    } catch (uploadError) {
+      const msg = uploadError.message || 'Upload failed'
+      // Never show raw HTML errors to the user
+      setAvatarError(msg.startsWith('<') || msg.length > 150 ? 'Upload failed. Check your Cloudinary settings.' : msg)
+      setAvatarUploading(false)
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    setAvatarUploading(true)
+    try {
+      await api.removeAvatar(token)
+      window.location.reload()
+    } catch (removeError) {
+      setAvatarError(removeError.message || 'Failed to remove image.')
+      setAvatarUploading(false)
     }
   }
 
@@ -149,12 +193,75 @@ export default function SettingsPage() {
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
           <SectionCard eyebrow="Profile" icon={CircleUser} subtitle="A clean read of the account details currently available in the session." title="Profile">
             <div className="grid gap-4 md:grid-cols-[140px_minmax(0,1fr)] md:items-center">
-              <div className="relative mx-auto h-28 w-28 rounded-full border border-[var(--glass-border)] bg-[rgba(255,255,255,0.04)]">
-                <div className="avatar h-full w-full rounded-full text-3xl">{getInitials(user?.name)}</div>
-                <div className="absolute inset-x-0 bottom-2 mx-auto flex h-9 w-9 items-center justify-center rounded-full border border-[var(--glass-border)] bg-[rgba(17,29,53,0.96)]">
-                  <Camera color="var(--primary-light)" size={16} strokeWidth={1.5} />
-                </div>
+              <div className="relative mx-auto">
+                <button
+                  type="button"
+                  onClick={() => setPhotoMenuOpen((prev) => !prev)}
+                  className="relative mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border border-[var(--glass-border)] bg-[rgba(255,255,255,0.04)] transition hover:ring-2 hover:ring-[var(--primary-light)] focus:outline-none"
+                >
+                  {avatarUploading ? (
+                    <div className="flex h-full w-full items-center justify-center bg-black/40">
+                      <svg className="h-6 w-6 animate-spin text-[var(--primary-light)]" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" d="M4 12a8 8 0 018-8" fill="currentColor" />
+                      </svg>
+                    </div>
+                  ) : user?.avatar ? (
+                    <img
+                      alt="Profile"
+                      className="h-full w-full object-cover"
+                      src={user.avatar}
+                    />
+                  ) : (
+                    <div className="avatar h-full w-full text-3xl">{getInitials(user?.name)}</div>
+                  )}
+                </button>
+
+                {/* Hidden file input */}
+                <input
+                  accept="image/jpeg,image/jpg,image/png"
+                  className="hidden"
+                  disabled={avatarUploading}
+                  onChange={(e) => {
+                    setPhotoMenuOpen(false);
+                    handleAvatarChange(e);
+                  }}
+                  ref={avatarInputRef}
+                  type="file"
+                />
+
+                {/* Floating Menu */}
+                {photoMenuOpen && !avatarUploading && (
+                  <div className="absolute left-1/2 top-full z-10 mt-2 flex w-40 -translate-x-1/2 flex-col gap-1 rounded-xl border border-[var(--glass-border)] bg-[rgba(17,29,53,0.98)] p-1 shadow-2xl backdrop-blur-md">
+                    <button
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[rgba(255,255,255,0.05)] text-left"
+                      onClick={() => {
+                        setPhotoMenuOpen(false);
+                        avatarInputRef.current?.click();
+                      }}
+                      type="button"
+                    >
+                      <Camera size={14} /> Upload new
+                    </button>
+                    {user?.avatar && (
+                      <button
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-[var(--danger)] transition hover:bg-[rgba(239,68,68,0.1)] text-left"
+                        onClick={() => {
+                          setPhotoMenuOpen(false);
+                          setPendingAction('remove_avatar');
+                        }}
+                        type="button"
+                      >
+                        <Trash2 size={14} /> Remove photo
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {avatarError && (
+                <p className="text-center text-xs text-[var(--danger)]">{avatarError}</p>
+              )}
 
               <div className="grid gap-4">
                 <article className="rounded-[20px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.03)] p-4">
@@ -266,19 +373,31 @@ export default function SettingsPage() {
       ) : null}
 
       <ConfirmDialog
-        busy={groupActioning}
-        confirmLabel={pendingAction === 'delete' ? 'Delete group' : 'Archive group'}
+        busy={groupActioning || avatarUploading}
+        confirmLabel={
+          pendingAction === 'remove_avatar'
+            ? 'Remove avatar'
+            : pendingAction === 'delete'
+              ? 'Delete group'
+              : 'Archive group'
+        }
         description={
-          pendingAction === 'delete'
-            ? 'This will permanently remove the group. The action is irreversible and the backend may reject it if balances remain unsettled.'
-            : 'This will make the group read-only so no new activity can be added.'
+          pendingAction === 'remove_avatar'
+            ? 'This will permanently remove your profile picture.'
+            : pendingAction === 'delete'
+              ? 'This will permanently remove the group. The action is irreversible and the backend may reject it if balances remain unsettled.'
+              : 'This will make the group read-only so no new activity can be added.'
         }
         onCancel={() => {
-          if (!groupActioning) {
+          if (!groupActioning && !avatarUploading) {
             setPendingAction('')
           }
         }}
         onConfirm={async () => {
+          if (pendingAction === 'remove_avatar') {
+            await handleRemoveAvatar()
+            return
+          }
           if (pendingAction === 'delete') {
             await handleDeleteGroup()
             return
@@ -287,7 +406,13 @@ export default function SettingsPage() {
           await handleArchiveGroup()
         }}
         open={Boolean(pendingAction)}
-        title={pendingAction === 'delete' ? 'Delete this group?' : 'Archive this group?'}
+        title={
+          pendingAction === 'remove_avatar'
+            ? 'Remove profile picture?'
+            : pendingAction === 'delete'
+              ? 'Delete this group?'
+              : 'Archive this group?'
+        }
       />
     </div>
   )

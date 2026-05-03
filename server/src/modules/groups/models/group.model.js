@@ -18,6 +18,12 @@ const memberSchema = new mongoose.Schema(
       default: "member",
     },
 
+    /**
+     * @deprecated This field is never actively updated.
+     * Live balances are always computed from the Ledger collection via
+     * settlement.service.js (simplifyDebts) and balance.service.js.
+     * Kept for schema compatibility — do not rely on this value.
+     */
     balance: {
       type: Number,
       default: 0, // +ve → owes, -ve → gets back

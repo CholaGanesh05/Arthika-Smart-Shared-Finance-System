@@ -3,6 +3,7 @@ import {
   buildGroupAnalytics,
   buildMemberAnalytics,
   generateGroupCSVData,
+  generateGroupPDFBuffer,
 } from "../services/analytics.service.js";
 
 // ======================
@@ -44,7 +45,7 @@ export const getMemberAnalytics = async (req, res, next) => {
 };
 
 // ======================
-// EXPORT GROUP TRANSACTIONS CSV
+// EXPORT GROUP TRANSACTIONS — CSV (FR7.6)
 // ======================
 export const exportGroupTransactionsCSV = async (req, res, next) => {
   try {
@@ -54,8 +55,27 @@ export const exportGroupTransactionsCSV = async (req, res, next) => {
     const csvData = await generateGroupCSVData(groupId, userId);
 
     res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", `attachment; filename="group_${groupId}_transactions.csv"`);
+    res.setHeader("Content-Disposition", `attachment; filename="arthika_group_${groupId}.csv"`);
     res.status(200).send(csvData);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ======================
+// EXPORT GROUP TRANSACTIONS — PDF (Architecture Diagram: pdfkit)
+// ======================
+export const exportGroupTransactionsPDF = async (req, res, next) => {
+  try {
+    const { groupId } = req.params;
+    const userId = req.user._id;
+
+    const pdfBuffer = await generateGroupPDFBuffer(groupId, userId);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="arthika_group_${groupId}.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.status(200).end(pdfBuffer);
   } catch (error) {
     next(error);
   }

@@ -4,6 +4,7 @@ import Group from "../../groups/models/group.model.js";
 import Settlement from "../models/settlement.model.js";
 import redisClient from "../../../config/redis.js";
 import { emitEvent } from "../../../utils/eventEmitter.js";
+import { logActivity } from "../../groups/services/activityLog.service.js";
 
 // ======================
 // MIN CASH FLOW (OPTIMIZED)
@@ -237,10 +238,15 @@ export const settleDebt = async ({
     emitEvent(groupId.toString(), "group:debt:settled", {
       from: fromUserId,
       to: toUserId,
-      amount: (amountPaise / 100).toFixed(2), // Convert mapping to rupees for Socket broadcast
+      amount: (amountPaise / 100).toFixed(2),
     });
 
     emitEvent(groupId, "group:balance:updated");
+
+    // FR2.8 — activity log
+    logActivity(groupId.toString(), fromUserId, "settlement:recorded",
+      `Settlement of ₹${(amountPaise / 100).toFixed(2)} recorded via ${method}`,
+      { toUserId, amountPaise, method });
 
     return { message: "Settlement successful" };
 
@@ -335,6 +341,12 @@ export const reviewSettlement = async (settlementId, status, requesterId) => {
     if (status === "disputed") {
       emitEvent(settlement.group.toString(), "group:balance:updated");
     }
+
+    // FR2.8 — activity log
+    logActivity(settlement.group.toString(), requesterId,
+      status === "confirmed" ? "settlement:confirmed" : "settlement:disputed",
+      `Settlement ${status}`,
+      { settlementId, status });
 
     return { message: `Settlement marked as ${status} successfully`, settlement };
   } catch (error) {

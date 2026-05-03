@@ -382,3 +382,155 @@ export const generateGroupCSVData = async (groupId, userId) => {
 
   return csvHeaders + csvRows;
 };
+
+// ======================
+// EXPORT GROUP TRANSACTIONS — PDF (Architecture Diagram: pdfkit)
+// Returns a Buffer of the generated PDF
+// ======================
+export const generateGroupPDFBuffer = async (groupId, userId) => {
+  if (!mongoose.Types.ObjectId.isValid(groupId)) throw new Error("Invalid group ID");
+
+  const group = await Group.findById(groupId).populate("members.user", "name email");
+  if (!group) throw new Error("Group not found");
+  if (!group.isMember(userId)) throw new Error("Not authorized");
+
+  const expenses = await Expense.find({ group: groupId })
+    .populate("paidBy", "name")
+    .sort({ date: -1 })
+    .lean();
+
+  const settlements = await Settlement.find({ group: groupId, status: { $ne: "disputed" } })
+    .populate("from", "name")
+    .populate("to", "name")
+    .sort({ date: -1 })
+    .lean();
+
+  // Dynamically import pdfkit (ESM-compatible)
+  const { default: PDFDocument } = await import("pdfkit");
+
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40, size: "A4" });
+    const chunks = [];
+
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    // ======================
+    // HEADER
+    // ======================
+    doc
+      .fontSize(22)
+      .font("Helvetica-Bold")
+      .text("Arthika — Group Finance Report", { align: "center" });
+
+    doc.moveDown(0.3);
+    doc
+      .fontSize(13)
+      .font("Helvetica")
+      .text(`Group: ${group.name}`, { align: "center" });
+
+    doc
+      .fontSize(10)
+      .fillColor("#666666")
+      .text(`Generated: ${new Date().toLocaleDateString("en-IN")}   |   Members: ${group.members.length}`, { align: "center" });
+
+    doc.moveDown(1);
+    doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#cccccc").stroke();
+    doc.moveDown(0.5);
+
+    // ======================
+    // EXPENSES TABLE
+    // ======================
+    doc.fontSize(13).fillColor("#000000").font("Helvetica-Bold").text("Expenses");
+    doc.moveDown(0.4);
+
+    // Table header
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#444444");
+    const col = { date: 40, title: 100, category: 250, paidBy: 340, amount: 470 };
+    doc.text("Date",     col.date,    doc.y, { width: 55 });
+    doc.text("Title",    col.title,   doc.y - doc.currentLineHeight(), { width: 145 });
+    doc.text("Category", col.category,doc.y - doc.currentLineHeight(), { width: 85 });
+    doc.text("Paid By",  col.paidBy,  doc.y - doc.currentLineHeight(), { width: 125 });
+    doc.text("Amount",   col.amount,  doc.y - doc.currentLineHeight(), { width: 80, align: "right" });
+    doc.moveDown(0.2);
+    doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#dddddd").stroke();
+    doc.moveDown(0.2);
+
+    doc.font("Helvetica").fillColor("#000000").fontSize(9);
+    let totalPaise = 0;
+
+    for (const exp of expenses) {
+      const y = doc.y;
+      const expDate = exp.date ? new Date(exp.date) : new Date(exp.createdAt);
+      const dateStr = expDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+      const amtStr = `\u20b9${(exp.amount / 100).toFixed(2)}`;
+      totalPaise += exp.amount;
+
+      doc.text(dateStr,                     col.date,     y, { width: 55 });
+      doc.text(exp.title || "-",             col.title,    y, { width: 145 });
+      doc.text(exp.category || "Other",      col.category, y, { width: 85 });
+      doc.text(exp.paidBy?.name || "?",      col.paidBy,   y, { width: 125 });
+      doc.text(amtStr,                       col.amount,   y, { width: 80, align: "right" });
+      doc.moveDown(0.5);
+
+      // Page overflow guard
+      if (doc.y > 750) { doc.addPage(); }
+    }
+
+    doc.moveDown(0.2);
+    doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#cccccc").stroke();
+    doc.moveDown(0.3);
+    doc.font("Helvetica-Bold").fontSize(10)
+      .text(`Total Group Spending: \u20b9${(totalPaise / 100).toFixed(2)}`, { align: "right" });
+
+    doc.moveDown(1.5);
+
+    // ======================
+    // SETTLEMENTS TABLE
+    // ======================
+    if (settlements.length > 0) {
+      if (doc.y > 650) doc.addPage();
+
+      doc.fontSize(13).font("Helvetica-Bold").fillColor("#000000").text("Settlements");
+      doc.moveDown(0.4);
+
+      doc.fontSize(9).font("Helvetica-Bold").fillColor("#444444");
+      doc.text("Date",   40,  doc.y, { width: 80 });
+      doc.text("From",   125, doc.y - doc.currentLineHeight(), { width: 140 });
+      doc.text("To",     270, doc.y - doc.currentLineHeight(), { width: 140 });
+      doc.text("Method", 415, doc.y - doc.currentLineHeight(), { width: 60 });
+      doc.text("Amount", 475, doc.y - doc.currentLineHeight(), { width: 80, align: "right" });
+      doc.moveDown(0.2);
+      doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#dddddd").stroke();
+      doc.moveDown(0.2);
+
+      doc.font("Helvetica").fillColor("#000000").fontSize(9);
+
+      for (const s of settlements) {
+        const y = doc.y;
+        const sDate = s.date ? new Date(s.date) : new Date(s.createdAt);
+        const dateStr = sDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+
+        doc.text(dateStr,              40,  y, { width: 80 });
+        doc.text(s.from?.name || "?", 125, y, { width: 140 });
+        doc.text(s.to?.name || "?",   270, y, { width: 140 });
+        doc.text(s.method?.toUpperCase() || "CASH", 415, y, { width: 60 });
+        doc.text(`\u20b9${(s.amount / 100).toFixed(2)}`, 475, y, { width: 80, align: "right" });
+        doc.moveDown(0.5);
+
+        if (doc.y > 750) { doc.addPage(); }
+      }
+    }
+
+    // ======================
+    // FOOTER
+    // ======================
+    doc.moveDown(2);
+    doc.fontSize(8).fillColor("#aaaaaa")
+      .text("Generated by Arthika — Smart Shared Finance System", { align: "center" });
+
+    doc.end();
+  });
+};
+

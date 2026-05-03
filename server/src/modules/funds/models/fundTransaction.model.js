@@ -103,15 +103,13 @@ fundTransactionSchema.index({ group: 1, createdAt: -1 });
 // ======================
 // 🔒 PRE-SAVE VALIDATION
 // ======================
-fundTransactionSchema.pre("save", function (next) {
+fundTransactionSchema.pre("save", function () {
   // enforce integer (paise)
   this.amount = Math.round(this.amount);
 
   if (this.amount <= 0) {
-    return next(new Error("Amount must be greater than 0"));
+    throw new Error("Amount must be greater than 0");
   }
-
-  next();
 });
 
 

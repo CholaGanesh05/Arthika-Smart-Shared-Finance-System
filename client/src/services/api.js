@@ -3,25 +3,30 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(
   '',
 )
 
+export function getSocketUrl() {
+  return API_BASE_URL.replace('/api/v1', '')
+}
+
 function buildUrl(path) {
   return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
 }
 
-async function request(path, { method = 'GET', token, body, signal } = {}) {
+async function request(path, { method = 'GET', token, body, signal, isFormData = false } = {}) {
   const headers = new Headers()
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  if (body !== undefined) {
+  // Do NOT set Content-Type for FormData — browser sets it with boundary automatically
+  if (body !== undefined && !isFormData) {
     headers.set('Content-Type', 'application/json')
   }
 
   const response = await fetch(buildUrl(path), {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? (isFormData ? body : JSON.stringify(body)) : undefined,
     signal,
   })
 
@@ -71,11 +76,26 @@ export const api = {
       body,
     })
   },
+  updateMemberRole(token, groupId, userId, role) {
+    return request(`/groups/${groupId}/members/${userId}/role`, {
+      method: 'PUT',
+      token,
+      body: { role },
+    })
+  },
   addExpense(token, groupId, body) {
     return request(`/expenses/${groupId}`, {
       method: 'POST',
       token,
       body,
+    })
+  },
+  uploadReceipt(token, formData) {
+    return request('/expenses/upload-receipt', {
+      method: 'POST',
+      token,
+      body: formData,
+      isFormData: true,
     })
   },
   getBalances(token, groupId, signal) {
@@ -101,7 +121,7 @@ export const api = {
     })
   },
   createFund(token, groupId, body) {
-    return request(`/funds/${groupId}`, {
+    return request(`/funds/group/${groupId}`, {
       method: 'POST',
       token,
       body,
@@ -109,6 +129,9 @@ export const api = {
   },
   getFund(token, fundId, signal) {
     return request(`/funds/${fundId}`, { token, signal })
+  },
+  getFundHistory(token, fundId, signal) {
+    return request(`/funds/${fundId}/history`, { token, signal })
   },
   contributeToFund(token, fundId, body) {
     return request(`/funds/${fundId}/contribute`, {
@@ -125,16 +148,34 @@ export const api = {
     })
   },
   getGroupAnalytics(token, groupId, signal) {
-    return request(`/analytics/group/${groupId}`, { token, signal })
+    return request(`/analytics/${groupId}`, { token, signal })
   },
   getMemberAnalytics(token, groupId, signal) {
-    return request(`/analytics/member/${groupId}`, { token, signal })
+    return request(`/analytics/${groupId}/member`, { token, signal })
   },
   updateProfile(token, body) {
     return request('/users/profile', {
       method: 'PUT',
       token,
       body,
+    })
+  },
+  // Upload profile avatar → Cloudinary via dedicated endpoint
+  // POST /api/v1/users/avatar  (multipart, field: "avatar")
+  async uploadAvatar(token, file) {
+    const form = new FormData()
+    form.append('avatar', file) // must match backend field name
+    return request('/users/avatar', {
+      method: 'POST',
+      token,
+      body: form,
+      isFormData: true,
+    })
+  },
+  removeAvatar(token) {
+    return request('/users/avatar', {
+      method: 'DELETE',
+      token,
     })
   },
   updatePassword(token, body) {
@@ -146,7 +187,7 @@ export const api = {
   },
   archiveGroup(token, groupId) {
     return request(`/groups/${groupId}/archive`, {
-      method: 'POST',
+      method: 'PATCH',
       token,
     })
   },
@@ -161,9 +202,9 @@ export const api = {
       method: 'DELETE',
       token,
     })
+  },
+  getGroupNotifications(token, groupId, signal) {
+    return request(`/notifications/${groupId}`, { token, signal })
   }
 }
 
-export function getSocketUrl() {
-  return import.meta.env.VITE_SOCKET_URL || window.location.origin
-}

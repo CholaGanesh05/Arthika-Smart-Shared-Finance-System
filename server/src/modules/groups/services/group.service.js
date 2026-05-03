@@ -2,6 +2,7 @@ import Group from "../models/group.model.js";
 import mongoose from "mongoose";
 import crypto from "crypto";
 import { emitEvent } from "../../../utils/eventEmitter.js";
+import { logActivity } from "./activityLog.service.js";
 
 
 // ======================
@@ -97,6 +98,11 @@ export const addMemberToGroup = async (groupId, userIdToAdd, currentUserId) => {
     throw new Error("User already in group");
   }
 
+  // SRS NFR3.5: max 50 members per group
+  if (group.members.length >= 50) {
+    throw new Error("Group has reached the maximum limit of 50 members");
+  }
+
   // add member
   group.members.push({
     user: userIdToAdd,
@@ -105,8 +111,10 @@ export const addMemberToGroup = async (groupId, userIdToAdd, currentUserId) => {
 
   await group.save();
 
-  // FR2.8: emit activity log event
+  // FR2.8: emit + log activity
   emitEvent(groupId, "group:member:joined", { userId: userIdToAdd });
+  logActivity(groupId, currentUserId, "group:member:joined",
+    `Member added to group`, { addedUser: userIdToAdd });
 
   return group;
 };
@@ -125,10 +133,17 @@ export const joinGroupWithCode = async (inviteCode, userId) => {
     throw new Error("You are already a member of this group");
   }
 
+  // SRS NFR3.5: max 50 members
+  if (group.members.length >= 50) {
+    throw new Error("Group has reached the maximum limit of 50 members");
+  }
+
   group.members.push({ user: userId, role: "member" });
   await group.save();
 
   emitEvent(group._id.toString(), "group:member:joined", { userId });
+  logActivity(group._id.toString(), userId, "group:member:joined",
+    `Joined group via invite code`);
 
   return group;
 };
@@ -164,6 +179,10 @@ export const updateMemberRole = async (groupId, targetUserId, newRole, currentUs
 
   targetMember.role = newRole;
   await group.save();
+
+  logActivity(groupId, currentUserId, "group:role:updated",
+    `Member role updated to ${newRole}`, { targetUser: targetUserId, newRole });
+
   return group;
 };
 
@@ -247,9 +266,11 @@ export const removeMemberFromGroup = async (groupId, userIdToRemove, currentUser
 
   group.members = group.members.filter(m => m.user.toString() !== userIdToRemove.toString());
   await group.save();
-  
+
   emitEvent(groupId, "group:member:removed", { userId: userIdToRemove });
-  
+  logActivity(groupId, currentUserId, "group:member:removed",
+    `Member removed from group`, { removedUser: userIdToRemove });
+
   return group;
 };
 
@@ -277,6 +298,10 @@ export const deleteGroup = async (groupId, currentUserId) => {
   }
 
   await Group.findByIdAndDelete(groupId);
+
+  logActivity(groupId, currentUserId, "group:deleted",
+    `Group deleted`);
+
   return { message: "Group deleted successfully" };
 };
 
@@ -298,6 +323,9 @@ export const archiveGroup = async (groupId, currentUserId) => {
   group.isActive = false;
   group.archivedAt = new Date();
   await group.save();
+
+  logActivity(groupId, currentUserId, "group:archived",
+    `Group archived`);
 
   return { message: "Group archived successfully" };
 };

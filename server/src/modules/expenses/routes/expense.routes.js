@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import protect from "../../../middlewares/auth.middleware.js";
 import validate from "../../../middlewares/validate.middleware.js";
 import { uploadReceiptMiddleware } from "../../../middlewares/upload.middleware.js";
+import { uploadToCloudinary } from "../../../infrastructure/storage/cloudinary.js";
 
 import {
   addExpenseSchema,
@@ -44,7 +45,7 @@ const router = express.Router();
 // Returns: { receiptUrl } to pass into addExpense
 // ======================
 router.post("/upload-receipt", protect, (req, res, next) => {
-  uploadReceiptMiddleware(req, res, (err) => {
+  uploadReceiptMiddleware(req, res, async (err) => {
     if (err) {
       // multer errors (file size, wrong mime type)
       return res.status(400).json({
@@ -60,14 +61,33 @@ router.post("/upload-receipt", protect, (req, res, next) => {
       });
     }
 
-    // Build a publicly accessible URL
-    const receiptUrl = `${req.protocol}://${req.get("host")}/uploads/receipts/${req.file.filename}`;
+    try {
+      // 1. Upload buffer directly to Cloudinary via stream
+      const safeName = req.file.originalname
+        .replace(/\.[^.]+$/, "")
+        .replace(/[^a-zA-Z0-9_-]/g, "_");
 
-    return res.status(200).json({
-      success: true,
-      message: "Receipt uploaded successfully",
-      receiptUrl,
-    });
+      const result = await uploadToCloudinary(req.file.buffer, {
+        folder: "arthika/receipts",
+        public_id: `receipt-${Date.now()}-${safeName}`,
+        transformation: [{ width: 1200, crop: "limit" }],
+        timestamp: Math.floor(Date.now() / 1000) + 7200, // +2 hrs for local clock drift
+      });
+
+      // 2. Cloudinary returns secure HTTPS URL
+      const receiptUrl = result.secure_url;
+
+      return res.status(200).json({
+        success: true,
+        message: "Receipt uploaded successfully",
+        receiptUrl,
+      });
+    } catch (uploadError) {
+      return res.status(500).json({
+        success: false,
+        message: uploadError.message || "Cloudinary upload failed",
+      });
+    }
   });
 });
 

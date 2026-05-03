@@ -9,7 +9,8 @@ import {
   deleteGroupController,
   joinWithCodeController,
   updateRoleController,
-  archiveGroupController
+  archiveGroupController,
+  getActivityLogController,
 } from "../controllers/group.controller.js";
 
 const router = express.Router();
@@ -24,6 +25,7 @@ router.post("/join", protect, joinWithCodeController);
 router.post("/:groupId/members", protect, addMemberController);
 router.delete("/:groupId/members/:userId", protect, removeMemberController);
 router.put("/:groupId/members/:userId/role", protect, updateRoleController);
+router.get("/:groupId/activity", protect, getActivityLogController); // FR2.8
 router.get("/:groupId", protect, getGroupByIdController);
 router.patch("/:groupId/archive", protect, archiveGroupController);
 router.delete("/:groupId", protect, deleteGroupController);

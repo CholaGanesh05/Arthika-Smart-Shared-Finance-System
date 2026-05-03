@@ -11,6 +11,8 @@ import {
   getProfile,
   updateProfile,
   changePassword,
+  uploadAvatar,
+  removeAvatar,
 } from "../controllers/user.controller.js";
 
 const router = express.Router();
@@ -39,5 +41,11 @@ router.put(
   validate(changePasswordSchema),
   changePassword
 );
+
+// ======================
+// UPLOAD / REMOVE AVATAR — /api/v1/users/avatar
+// ======================
+router.post("/avatar", protect, uploadAvatar);
+router.delete("/avatar", protect, removeAvatar);
 
 export default router;

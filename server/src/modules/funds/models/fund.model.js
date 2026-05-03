@@ -100,11 +100,11 @@ fundSchema.index({ group: 1, isActive: 1 });
 // 🔒 PRE-SAVE HOOKS
 // ======================
 
-fundSchema.pre("save", function (next) {
+fundSchema.pre("save", function () {
   // normalize name
-  this.name = this.name.trim();
-
-  next();
+  if (this.name) {
+    this.name = this.name.trim();
+  }
 });
 
 

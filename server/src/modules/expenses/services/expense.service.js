@@ -4,6 +4,7 @@ import Group from "../../groups/models/group.model.js";
 import { createLedgerEntries } from "./ledger.service.js";
 import redisClient from "../../../config/redis.js";
 import { emitEvent } from "../../../utils/eventEmitter.js";
+import { logActivity } from "../../groups/services/activityLog.service.js";
 
 // ======================
 // HELPER — rupees → paise
@@ -237,6 +238,11 @@ export const addExpense = async ({
       expenseId: createdExpense._id 
     });
 
+    // FR2.8 — activity log
+    logActivity(groupId.toString(), paidBy, "expense:created",
+      `Expense "${title}" of ₹${(amountPaise / 100).toFixed(2)} added`,
+      { expenseId: createdExpense._id, amount: amountPaise, category });
+
     return createdExpense;
 
   } catch (error) {
@@ -348,6 +354,11 @@ export const editExpense = async (expenseId, updates, requesterId) => {
     expenseId: expense._id 
   });
 
+  // FR2.8 — activity log
+  logActivity(expense.group.toString(), requesterId, "expense:updated",
+    `Expense "${expense.title}" was edited`,
+    { expenseId: expense._id });
+
   return expense;
 };
 
@@ -443,6 +454,10 @@ export const deleteExpense = async (expenseId, requesterId) => {
     session.endSession();
 
     emitEvent(groupObjectId.toString(), "expense:deleted", { expenseId });
+
+    // FR2.8 — activity log
+    logActivity(groupObjectId.toString(), requesterId, "expense:deleted",
+      `Expense was deleted`, { expenseId });
 
     return { message: "Expense deleted successfully" };
 

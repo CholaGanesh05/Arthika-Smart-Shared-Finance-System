@@ -28,6 +28,7 @@ export default function FundPage() {
   const { token } = useAuth()
   const [relatedGroupId, setRelatedGroupId] = useState(location.state?.groupId || '')
   const [fund, setFund] = useState(null)
+  const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -60,8 +61,12 @@ export default function FundPage() {
     setError('')
 
     try {
-      const nextFund = await fetchFundSnapshot(token, fundId)
+      const [nextFund, historyPayload] = await Promise.all([
+        fetchFundSnapshot(token, fundId),
+        api.getFundHistory(token, fundId)
+      ])
       applyFund(nextFund)
+      setHistory(historyPayload?.data?.transactions || [])
     } catch (loadError) {
       setError(loadError.message)
     } finally {
@@ -77,13 +82,17 @@ export default function FundPage() {
       setError('')
 
       try {
-        const nextFund = await fetchFundSnapshot(token, fundId)
+        const [nextFund, historyPayload] = await Promise.all([
+          fetchFundSnapshot(token, fundId),
+          api.getFundHistory(token, fundId)
+        ])
 
         if (cancelled) {
           return
         }
 
         applyFund(nextFund)
+        setHistory(historyPayload?.data?.transactions || [])
       } catch (loadError) {
         if (!cancelled) {
           setError(loadError.message)
@@ -338,6 +347,42 @@ export default function FundPage() {
             <p className="mt-2 font-cabinet text-sm text-[var(--text-primary)]">{formatDateTime(fund?.createdAt)}</p>
           </article>
         </div>
+      </SectionCard>
+
+      <SectionCard eyebrow="History" icon={PiggyBank} subtitle="Chronological list of all contributions and withdrawals for this fund." title="Transaction history">
+        {history.length ? (
+          <div className="timeline">
+            {history.map((txn) => {
+              const isContribution = txn.type === 'contribution'
+              return (
+                <article className="timeline-item" key={getEntityId(txn)}>
+                  <div className="flex items-center justify-between gap-4">
+                    <strong className="font-cabinet text-sm text-[var(--text-primary)]">
+                      {txn.user?.name || 'Unknown member'} {isContribution ? 'contributed' : 'withdrew'}
+                    </strong>
+                    <span className={isContribution ? 'fin-pill fin-pill-positive' : 'fin-pill fin-pill-negative'}>
+                      {isContribution ? '+' : '-'}{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(txn.amountRupees ?? (txn.amount / 100))}
+                    </span>
+                  </div>
+                  <p className="fin-copy text-sm mt-1">
+                    {txn.description || (isContribution ? 'No description provided' : 'No reason provided')}
+                  </p>
+                  <span className="text-xs text-[var(--text-secondary)] mt-2 block">{formatDateTime(txn.createdAt)}</span>
+                </article>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="rounded-[22px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.03)] p-8 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[rgba(255,255,255,0.05)] text-[var(--text-secondary)]">
+              <Clock3 size={24} strokeWidth={1.5} />
+            </div>
+            <h3 className="font-cabinet text-lg font-bold text-[var(--text-primary)]">No history yet</h3>
+            <p className="fin-copy mt-2 text-sm max-w-sm mx-auto">
+              Once members start adding or withdrawing money, the chronological history will appear here.
+            </p>
+          </div>
+        )}
       </SectionCard>
     </div>
   )
