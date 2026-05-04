@@ -26,6 +26,10 @@ const shortDateFormatter = new Intl.DateTimeFormat('en-IN', {
   month: 'short',
 })
 
+function padDateTimePart(value) {
+  return String(value).padStart(2, '0')
+}
+
 export function formatCurrency(amount = 0) {
   const numericAmount = Number(amount) || 0
   return currencyFormatter.format(numericAmount)
@@ -80,6 +84,36 @@ export function formatRelativeDate(value) {
   }
 
   return shortDateFormatter.format(date)
+}
+
+export function toDateTimeLocalValue(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const year = date.getFullYear()
+  const month = padDateTimePart(date.getMonth() + 1)
+  const day = padDateTimePart(date.getDate())
+  const hours = padDateTimePart(date.getHours())
+  const minutes = padDateTimePart(date.getMinutes())
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+export function toIsoFromLocalDateTime(value) {
+  if (!value) {
+    return undefined
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return undefined
+  }
+
+  return date.toISOString()
 }
 
 export function getGreeting(date = new Date()) {

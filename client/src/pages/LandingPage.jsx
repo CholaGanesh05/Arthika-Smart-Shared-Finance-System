@@ -13,6 +13,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { ThemeToggle } from '../components/ThemeToggle'
 import { useAuth } from '../context/AuthContext'
 
 const features = [
@@ -115,6 +116,7 @@ export default function LandingPage() {
           <img src="/logo.png" alt="Arthika" style={{ height: '36px', width: 'auto' }} />
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <ThemeToggle lightColor="#fff" />
           <Link to={isAuthenticated ? '/dashboard' : '/login'}
             style={{
               padding: '0.5rem 1.1rem', borderRadius: 8,

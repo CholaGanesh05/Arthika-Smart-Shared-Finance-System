@@ -17,6 +17,255 @@ const getMonthLabel = (date) => `${monthNames[date.getMonth()]} ${date.getFullYe
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 const formatExportDateTime = (date) =>
   `${padTwo(date.getDate())} ${monthNames[date.getMonth()]} ${date.getFullYear()} ${padTwo(date.getHours())}:${padTwo(date.getMinutes())}`;
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const DEFAULT_GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+
+const formatInsightCurrency = (rupeeValue) =>
+  `\u20b9${Number(rupeeValue || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+
+function extractInsightText(value) {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => extractInsightText(entry)).filter(Boolean).join(" ");
+  }
+
+  if (value && typeof value === "object") {
+    const preferredKeys = ["text", "summary", "title", "description", "content", "message", "label", "value"];
+
+    for (const key of preferredKeys) {
+      if (value[key] !== undefined && value[key] !== null) {
+        const extracted = extractInsightText(value[key]);
+        if (extracted) {
+          return extracted;
+        }
+      }
+    }
+  }
+
+  return "";
+}
+
+function enforceInrCurrency(text) {
+  if (!text) return "";
+
+  return String(text)
+    .replace(/\$\s*/g, "\u20b9")
+    .replace(/\bUSD\b/gi, "INR")
+    .replace(/\bUS dollars?\b/gi, "INR");
+}
+
+function truncateInsight(text, maxLength = 220) {
+  if (!text) return "";
+  const normalized = enforceInrCurrency(extractInsightText(text)).replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 3).trim()}...`;
+}
+
+function normalizeInsightList(items, fallbackItems, maxItems = 4) {
+  const normalized = (Array.isArray(items) ? items : [])
+    .map((item) => truncateInsight(item))
+    .filter(Boolean)
+    .slice(0, maxItems);
+
+  if (normalized.length) {
+    return normalized;
+  }
+
+  return (fallbackItems || []).slice(0, maxItems);
+}
+
+function extractFirstJsonObject(rawText) {
+  if (!rawText) return null;
+
+  const trimmed = rawText.trim();
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch?.[1]?.trim() || trimmed;
+
+  const firstBrace = candidate.indexOf("{");
+  const lastBrace = candidate.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(candidate.slice(firstBrace, lastBrace + 1));
+  } catch {
+    return null;
+  }
+}
+
+function buildFallbackAnalyticsAssistant({
+  groupName,
+  memberCount,
+  totalGroupSpendingPaise,
+  averagePerMemberPaise,
+  categoryEntries,
+  outstandingBalances,
+  forecastRange,
+  forecastConfidence,
+  financialHub,
+  anomalies,
+}) {
+  const topCategory = categoryEntries[0];
+  const largestOpenBalance = outstandingBalances[0];
+  const totalSpendText = formatInsightCurrency(toRupeesFloat(totalGroupSpendingPaise));
+  const averageSpendText = formatInsightCurrency(toRupeesFloat(averagePerMemberPaise));
+
+  let summary = `${groupName} has tracked ${totalSpendText} across ${memberCount} member${memberCount === 1 ? "" : "s"}, averaging ${averageSpendText} per member.`;
+
+  if (topCategory) {
+    summary += ` ${topCategory.name} leads the mix at ${topCategory.share}% of total spend.`;
+  } else if (!totalGroupSpendingPaise) {
+    summary = `${groupName} does not have enough expense history yet to summarize group spending patterns.`;
+  }
+
+  const highlights = [];
+  const suggestions = [];
+
+  if (topCategory) {
+    highlights.push(`Top category is ${topCategory.name} at ${formatInsightCurrency(topCategory.amount)} (${topCategory.share}% of spend).`);
+  }
+
+  if (largestOpenBalance) {
+    highlights.push(
+      `Largest open balance is ${largestOpenBalance.from.name} owing ${largestOpenBalance.to.name} ${formatInsightCurrency(toRupeesFloat(largestOpenBalance.amount))}.`
+    );
+  }
+
+  if (forecastRange?.expected !== undefined) {
+    highlights.push(
+      `Expected next-month spend is around ${formatInsightCurrency(forecastRange.expected)} with ${forecastConfidence} confidence.`
+    );
+  }
+
+  if (financialHub?.name) {
+    highlights.push(`${financialHub.name} is the main money-flow hub with ${financialHub.degree} active balance links.`);
+  }
+
+  if (anomalies[0]) {
+    suggestions.push(`Review "${anomalies[0].title}" because it is much larger than the group's usual expense size.`);
+  }
+
+  if (topCategory?.share >= 50) {
+    suggestions.push(`Set a category cap for ${topCategory.name}; it currently accounts for more than half of the group's spend.`);
+  }
+
+  if (forecastConfidence === "low") {
+    suggestions.push("Keep recording dated expenses consistently so the forecast stabilizes and becomes more dependable.");
+  }
+
+  if (!suggestions.length) {
+    suggestions.push("Spending is relatively balanced right now. Keep categories and dates tidy to maintain clear analytics.");
+  }
+
+  return {
+    summary: truncateInsight(summary, 260),
+    highlights: normalizeInsightList(highlights, [
+      `Total tracked spend stands at ${totalSpendText}.`,
+    ]),
+    suggestions: normalizeInsightList(suggestions, [
+      "Keep logging accurate categories and dates to improve planning insights.",
+    ]),
+  };
+}
+
+async function buildAnalyticsAssistant(summaryPayload) {
+  const fallbackAssistant = buildFallbackAnalyticsAssistant(summaryPayload);
+  const groqApiKey = process.env.GROQ_API_KEY;
+
+  if (!groqApiKey || typeof fetch !== "function") {
+    return fallbackAssistant;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+  const promptPayload = {
+    groupName: summaryPayload.groupName,
+    memberCount: summaryPayload.memberCount,
+    currency: "INR",
+    totalGroupSpendingINR: toRupeesFloat(summaryPayload.totalGroupSpendingPaise),
+    averagePerMemberINR: toRupeesFloat(summaryPayload.averagePerMemberPaise),
+    topCategories: summaryPayload.categoryEntries.slice(0, 4).map((entry) => ({
+      name: entry.name,
+      amountINR: entry.amount,
+      sharePercent: entry.share,
+    })),
+    outstandingBalances: summaryPayload.outstandingBalances.slice(0, 4).map((entry) => ({
+      from: entry.from.name,
+      to: entry.to.name,
+      amountINR: toRupeesFloat(entry.amount),
+    })),
+    forecast: summaryPayload.forecastRange
+      ? {
+          conservativeINR: summaryPayload.forecastRange.conservative,
+          expectedINR: summaryPayload.forecastRange.expected,
+          stretchINR: summaryPayload.forecastRange.stretch,
+          confidence: summaryPayload.forecastConfidence,
+        }
+      : null,
+    financialHub: summaryPayload.financialHub,
+    anomalies: summaryPayload.anomalies.slice(0, 3),
+    monthlyTrend: summaryPayload.monthlyTrendEntries.slice(-6),
+    smartInsights: summaryPayload.smartInsights.slice(0, 4),
+  };
+
+  try {
+    const response = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${groqApiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: DEFAULT_GROQ_MODEL,
+        temperature: 0.35,
+        max_tokens: 500,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a finance analytics assistant for a shared-expense app in India. Return only valid JSON with keys summary, highlights, suggestions. Keep summary to 2 short sentences max. Keep highlights to 2-4 items. Keep suggestions to 2-4 items. Use only the provided data. All amounts are INR and must be written as ₹ or INR, never as $ or USD. Every highlight and suggestion item must be a plain string, not an object. Do not mention AI models, providers, missing integrations, fallback systems, or that data was supplied in JSON.",
+          },
+          {
+            role: "user",
+            content: `Create a concise analytics summary for this group data:\n${JSON.stringify(promptPayload)}`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Groq analytics request failed with status ${response.status}`);
+    }
+
+    const responsePayload = await response.json();
+    const rawContent = responsePayload?.choices?.[0]?.message?.content || "";
+    const parsedContent = extractFirstJsonObject(rawContent);
+
+    if (!parsedContent) {
+      throw new Error("Groq response did not contain valid JSON content");
+    }
+
+    return {
+      summary: truncateInsight(parsedContent.summary, 260) || fallbackAssistant.summary,
+      highlights: normalizeInsightList(parsedContent.highlights, fallbackAssistant.highlights),
+      suggestions: normalizeInsightList(parsedContent.suggestions, fallbackAssistant.suggestions),
+    };
+  } catch (error) {
+    console.warn("Analytics assistant fallback activated:", error.message);
+    return fallbackAssistant;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 // ======================
 // GET GROUP ANALYTICS
@@ -349,52 +598,20 @@ export const buildGroupAnalytics = async (groupId, userId) => {
     }
   }
 
-  const aiHighlights = [];
-  const aiSuggestions = [];
-
-  if (categoryEntries.length) {
-    aiHighlights.push(`Top category right now is ${categoryEntries[0].name} at \u20b9${categoryEntries[0].amount.toFixed(2)}.`);
-  }
-
-  const largestOpenBalance = outstandingBalances[0];
-  if (largestOpenBalance) {
-    aiHighlights.push(
-      `Largest open balance is ${largestOpenBalance.from.name} owing ${largestOpenBalance.to.name} \u20b9${toRupeesFloat(largestOpenBalance.amount).toFixed(2)}.`
-    );
-  }
-
-  if (forecastRange?.expected !== undefined) {
-    aiHighlights.push(`Expected next-month spend is about \u20b9${forecastRange.expected.toFixed(2)} with ${forecastConfidence} confidence.`);
-  }
-
-  if (financialHub?.name) {
-    aiHighlights.push(`${financialHub.name} sits at the center of the current money flow.`);
-  }
-
-  if (anomalies.length) {
-    aiSuggestions.push(`Review "${anomalies[0].title}" because it stands out from the group's normal expense size.`);
-  }
-
-  if (categoryEntries[0]?.share >= 50) {
-    aiSuggestions.push(`More than half of the spend is in ${categoryEntries[0].name}. Track whether that category needs a separate budget cap.`);
-  }
-
-  if (forecastConfidence === "low") {
-    aiSuggestions.push("Forecast confidence is still low. Keep recording dated transactions before using it for tight planning.");
-  }
-
-  if (!aiSuggestions.length) {
-    aiSuggestions.push("Spending is fairly even right now. Keep recording dates and categories to unlock stronger pattern detection.");
-  }
-
-  const aiAssistant = {
-    provider: "rule-based",
-    mode: "basic",
-    readiness: "Groq-ready",
-    summary: aiHighlights[0] || "Basic analytics is active. Connect Groq later for deeper narrative insights.",
-    highlights: aiHighlights,
-    suggestions: aiSuggestions,
-  };
+  const aiAssistant = await buildAnalyticsAssistant({
+    groupName: group.name,
+    memberCount,
+    totalGroupSpendingPaise,
+    averagePerMemberPaise,
+    categoryEntries,
+    outstandingBalances,
+    forecastRange,
+    forecastConfidence,
+    financialHub,
+    anomalies,
+    smartInsights,
+    monthlyTrendEntries,
+  });
 
   return {
     totalGroupSpending: toRupees(totalGroupSpendingPaise),

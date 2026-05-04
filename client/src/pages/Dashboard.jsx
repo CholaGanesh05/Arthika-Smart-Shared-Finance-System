@@ -245,7 +245,7 @@ export default function Dashboard() {
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
             <div className="space-y-4">
               <p className="fin-kicker">Your Net Balance</p>
-              <div className={`text-4xl font-display font-bold md:text-5xl ${netBalance > 0 ? 'balance-positive' : netBalance < 0 ? 'balance-negative' : 'balance-neutral'}`}>
+              <div className={`text-4xl font-sans font-bold md:text-5xl ${netBalance > 0 ? 'balance-positive' : netBalance < 0 ? 'balance-negative' : 'balance-neutral'}`}>
                 <CountUpNumber value={netBalance} />
               </div>
               <div className="summary-pills">
@@ -267,7 +267,7 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <p className="fin-kicker">Active groups</p>
-                  <p className="text-2xl font-display text-[var(--primary)] font-bold">{groups.length}</p>
+                  <p className="text-2xl font-sans text-[var(--primary)] font-bold">{groups.length}</p>
                 </div>
               </div>
               <p className="fin-copy text-sm">Balances refresh from the live workspace you already use today.</p>

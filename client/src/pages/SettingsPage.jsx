@@ -232,9 +232,9 @@ export default function SettingsPage() {
 
                 {/* Floating Menu */}
                 {photoMenuOpen && !avatarUploading && (
-                  <div className="absolute left-1/2 top-full z-10 mt-2 flex w-40 -translate-x-1/2 flex-col gap-1 rounded-xl border border-[var(--glass-border)] bg-[rgba(17,29,53,0.98)] p-1 shadow-2xl backdrop-blur-md">
+                  <div className="absolute left-1/2 top-full z-10 mt-2 flex w-44 -translate-x-1/2 flex-col gap-1 rounded-xl border border-[var(--glass-border)] bg-[var(--bg-elevated)] p-1 shadow-2xl">
                     <button
-                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[rgba(255,255,255,0.05)] text-left"
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--text-primary)] transition hover:bg-[rgba(67,97,238,0.08)] text-left"
                       onClick={() => {
                         setPhotoMenuOpen(false);
                         avatarInputRef.current?.click();

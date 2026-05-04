@@ -90,6 +90,19 @@ export const api = {
       body,
     })
   },
+  deleteExpense(token, groupId, expenseId) {
+    return request(`/expenses/${groupId}/${expenseId}`, {
+      method: 'DELETE',
+      token,
+    })
+  },
+  editExpense(token, groupId, expenseId, body) {
+    return request(`/expenses/${groupId}/${expenseId}`, {
+      method: 'PUT',
+      token,
+      body,
+    })
+  },
   uploadReceipt(token, formData) {
     return request('/expenses/upload-receipt', {
       method: 'POST',
@@ -97,6 +110,16 @@ export const api = {
       body: formData,
       isFormData: true,
     })
+  },
+  recordAdvancePayment(token, groupId, body) {
+    return request(`/expenses/${groupId}/advance`, {
+      method: 'POST',
+      token,
+      body,
+    })
+  },
+  getAdvancePayments(token, groupId, signal) {
+    return request(`/expenses/${groupId}/advance`, { token, signal })
   },
   getBalances(token, groupId, signal) {
     return request(`/expenses/${groupId}/balances`, { token, signal })

@@ -114,6 +114,7 @@ body {
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
   text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

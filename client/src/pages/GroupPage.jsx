@@ -29,6 +29,7 @@ import {
   Users,
   UtensilsCrossed,
   Wallet,
+  X,
   Zap,
   Crown,
 } from 'lucide-react'
@@ -41,7 +42,12 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../services/api'
 import { forgetFund, getKnownFunds, rememberFund } from '../services/fundRegistry'
 import { getSocket } from '../services/socket'
-import { formatCurrency, formatDate, formatRelativeDate } from '../utils/format'
+import {
+  formatCurrency,
+  formatDateTime,
+  toDateTimeLocalValue,
+  toIsoFromLocalDateTime,
+} from '../utils/format'
 import {
   buildExactSplitState,
   getEntityId,
@@ -56,12 +62,14 @@ async function fetchGroupWorkspace(token, groupId) {
     expensesPayload,
     planPayload,
     historyPayload,
+    advancePayload,
   ] = await Promise.all([
     api.getGroup(token, groupId),
     api.getBalances(token, groupId),
     api.getExpenses(token, groupId),
     api.getSettlementPlan(token, groupId),
     api.getSettlementHistory(token, groupId),
+    api.getAdvancePayments(token, groupId).catch(() => ({ data: [] })),
   ])
 
   const storedFunds = getKnownFunds(groupId)
@@ -75,6 +83,7 @@ async function fetchGroupWorkspace(token, groupId) {
     expenses: expensesPayload?.data ?? [],
     settlementPlan: planPayload?.data ?? [],
     settlementHistory: historyPayload?.data ?? [],
+    advancePayments: advancePayload?.data ?? [],
     fundSnapshots: fundResults.map((result, index) => {
       if (result.status === 'fulfilled') {
         return result.value?.data
@@ -116,6 +125,43 @@ function getRoleIcon(role) {
   return UserCircle
 }
 
+function getDefaultTransactionTime() {
+  return toDateTimeLocalValue(new Date())
+}
+
+function applyWorkspaceSnapshot({
+  snapshot,
+  userId,
+  setGroup,
+  setBalances,
+  setExpenses,
+  setSettlementPlan,
+  setSettlementHistory,
+  setFundSnapshots,
+  setAdvancePayments,
+  setExpenseForm,
+}) {
+  setGroup(snapshot.group)
+  setBalances(snapshot.balances)
+  setExpenses(snapshot.expenses)
+  setSettlementPlan(snapshot.settlementPlan)
+  setSettlementHistory(snapshot.settlementHistory)
+  setFundSnapshots(snapshot.fundSnapshots)
+  setAdvancePayments(snapshot.advancePayments ?? [])
+  setExpenseForm((current) => {
+    const memberIds = (snapshot.group?.members ?? []).map((member) => getEntityId(member.user))
+    const nextPaidBy = memberIds.includes(current.paidBy) ? current.paidBy : userId
+
+    return {
+      ...current,
+      paidBy: nextPaidBy,
+      splits: Object.keys(current.splits).length
+        ? current.splits
+        : buildExactSplitState(snapshot.group?.members ?? []),
+    }
+  })
+}
+
 export default function GroupPage() {
   const { groupId } = useParams()
   const { token, user } = useAuth()
@@ -128,6 +174,14 @@ export default function GroupPage() {
   const [settlementPlan, setSettlementPlan] = useState([])
   const [settlementHistory, setSettlementHistory] = useState([])
   const [fundSnapshots, setFundSnapshots] = useState([])
+  const [advancePayments, setAdvancePayments] = useState([])
+  const [advanceForm, setAdvanceForm] = useState({
+    amount: '',
+    note: '',
+    toUserId: '',
+    dateTime: getDefaultTransactionTime(),
+  })
+  const [submittingAdvance, setSubmittingAdvance] = useState(false)
   const [rememberFundId, setRememberFundId] = useState('')
   const [submitting, setSubmitting] = useState({
     expense: false,
@@ -139,12 +193,23 @@ export default function GroupPage() {
   const [expenseForm, setExpenseForm] = useState({
     description: '',
     amount: '',
+    paidBy: user.id,
+    dateTime: getDefaultTransactionTime(),
+    category: 'Other',
     splitType: 'equal',
     splits: {},
+    receiptFile: null,
+  })
+  const [editingExpenseId, setEditingExpenseId] = useState(null)
+  const [editExpenseForm, setEditExpenseForm] = useState({
+    title: '',
+    category: 'Other',
+    description: '',
   })
   const [settlementForm, setSettlementForm] = useState({
     toUserId: '',
     amount: '',
+    dateTime: getDefaultTransactionTime(),
     method: 'cash',
     reference: '',
   })
@@ -161,25 +226,6 @@ export default function GroupPage() {
   const [expensePage, setExpensePage] = useState(1)
   const EXPENSES_PER_PAGE = 5
 
-  function applyWorkspace(snapshot) {
-    setGroup(snapshot.group)
-    setBalances(snapshot.balances)
-    setExpenses(snapshot.expenses)
-    setSettlementPlan(snapshot.settlementPlan)
-    setSettlementHistory(snapshot.settlementHistory)
-    setFundSnapshots(snapshot.fundSnapshots)
-    setExpenseForm((current) => {
-      if (Object.keys(current.splits).length) {
-        return current
-      }
-
-      return {
-        ...current,
-        splits: buildExactSplitState(snapshot.group?.members ?? []),
-      }
-    })
-  }
-
   async function loadWorkspace({ silent = false } = {}) {
     if (!silent) {
       setLoading(true)
@@ -189,7 +235,18 @@ export default function GroupPage() {
 
     try {
       const snapshot = await fetchGroupWorkspace(token, groupId)
-      applyWorkspace(snapshot)
+      applyWorkspaceSnapshot({
+        snapshot,
+        userId: user.id,
+        setGroup,
+        setBalances,
+        setExpenses,
+        setSettlementPlan,
+        setSettlementHistory,
+        setFundSnapshots,
+        setAdvancePayments,
+        setExpenseForm,
+      })
     } catch (loadError) {
       setError(loadError.message)
     } finally {
@@ -213,7 +270,18 @@ export default function GroupPage() {
           return
         }
 
-        applyWorkspace(snapshot)
+        applyWorkspaceSnapshot({
+          snapshot,
+          userId: user.id,
+          setGroup,
+          setBalances,
+          setExpenses,
+          setSettlementPlan,
+          setSettlementHistory,
+          setFundSnapshots,
+          setAdvancePayments,
+          setExpenseForm,
+        })
       } catch (loadError) {
         if (!cancelled) {
           setError(loadError.message)
@@ -230,14 +298,25 @@ export default function GroupPage() {
     return () => {
       cancelled = true
     }
-  }, [groupId, token])
+  }, [groupId, token, user.id])
 
   useEffect(() => {
     const socket = getSocket()
     const handleRefresh = async () => {
       try {
         const snapshot = await fetchGroupWorkspace(token, groupId)
-        applyWorkspace(snapshot)
+        applyWorkspaceSnapshot({
+          snapshot,
+          userId: user.id,
+          setGroup,
+          setBalances,
+          setExpenses,
+          setSettlementPlan,
+          setSettlementHistory,
+          setFundSnapshots,
+          setAdvancePayments,
+          setExpenseForm,
+        })
       } catch (refreshError) {
         setError(refreshError.message)
       }
@@ -256,12 +335,62 @@ export default function GroupPage() {
       socket.off('group:debt:settled', handleRefresh)
       socket.disconnect()
     }
-  }, [groupId, token])
+  }, [groupId, token, user.id])
 
   const currentRole = getMemberRole(group, user.id)
   const payableSettlements = settlementPlan.filter((item) => getEntityId(item.from) === user.id)
+  const groupOwnerId = getEntityId(group?.members?.find((member) => member.role === 'owner')?.user)
   const totalExactSplit = Object.values(expenseForm.splits).reduce((sum, amount) => sum + (Number(amount) || 0), 0)
   const exactSplitDifference = (Number(expenseForm.amount) || 0) - totalExactSplit
+  const advanceRecipientOptions = useMemo(() => {
+    const suggestedAmounts = new Map(
+      payableSettlements.map((item) => [getEntityId(item.to), getMoneyValue(item)]),
+    )
+
+    return (group?.members ?? [])
+      .map((member) => {
+        const memberId = getEntityId(member.user)
+
+        if (!memberId || memberId === user.id) {
+          return null
+        }
+
+        return {
+          id: memberId,
+          name: member.user?.name || 'Unknown member',
+          role: member.role,
+          suggestedAmount: suggestedAmounts.get(memberId) ?? 0,
+        }
+      })
+      .filter(Boolean)
+      .sort((left, right) => {
+        if (Boolean(left.suggestedAmount) !== Boolean(right.suggestedAmount)) {
+          return Number(Boolean(right.suggestedAmount)) - Number(Boolean(left.suggestedAmount))
+        }
+
+        if (left.role === 'owner' && right.role !== 'owner') {
+          return -1
+        }
+
+        if (right.role === 'owner' && left.role !== 'owner') {
+          return 1
+        }
+
+        return left.name.localeCompare(right.name)
+      })
+  }, [group?.members, payableSettlements, user.id])
+  const defaultAdvanceRecipientId =
+    advanceRecipientOptions.find((option) => option.suggestedAmount > 0)?.id ||
+    advanceRecipientOptions.find((option) => option.id === groupOwnerId)?.id ||
+    advanceRecipientOptions[0]?.id ||
+    ''
+  const activeAdvanceRecipientId = advanceRecipientOptions.some(
+    (option) => option.id === advanceForm.toUserId,
+  )
+    ? advanceForm.toUserId
+    : defaultAdvanceRecipientId
+  const selectedAdvanceRecipient =
+    advanceRecipientOptions.find((option) => option.id === activeAdvanceRecipientId) ?? null
 
   const filteredExpenses = expenses.filter((expense) => {
     const description = expense.description?.toLowerCase() || ''
@@ -313,11 +442,26 @@ export default function GroupPage() {
     setSubmitting((current) => ({ ...current, expense: true }))
 
     try {
+      let receiptUrl
+      if (expenseForm.receiptFile) {
+        const formData = new FormData()
+        formData.append('receipt', expenseForm.receiptFile)
+        const uploadRes = await api.uploadReceipt(token, formData)
+        receiptUrl = uploadRes.data?.receiptUrl || uploadRes.receiptUrl || uploadRes.url
+      }
+
       const amount = Number(expenseForm.amount)
       const payload = {
-        description: expenseForm.description.trim(),
+        title: expenseForm.description.trim(),
         amount,
+        paidBy: expenseForm.paidBy,
+        date: toIsoFromLocalDateTime(expenseForm.dateTime),
+        category: expenseForm.category,
         splitType: expenseForm.splitType,
+      }
+      
+      if (receiptUrl) {
+        payload.receiptUrl = receiptUrl
       }
 
       if (expenseForm.splitType === 'exact') {
@@ -340,12 +484,16 @@ export default function GroupPage() {
       }
 
       await api.addExpense(token, groupId, payload)
-      setExpenseForm({
+      setExpenseForm((current) => ({
         description: '',
         amount: '',
+        paidBy: current.paidBy,
+        dateTime: getDefaultTransactionTime(),
+        category: 'Other',
         splitType: 'equal',
         splits: buildExactSplitState(group?.members ?? []),
-      })
+        receiptFile: null,
+      }))
       setNotice('Expense recorded successfully.')
       await loadWorkspace({ silent: true })
     } catch (submitError) {
@@ -365,6 +513,7 @@ export default function GroupPage() {
       await api.settleDebt(token, groupId, {
         toUserId: settlementForm.toUserId,
         amount: Number(settlementForm.amount),
+        date: toIsoFromLocalDateTime(settlementForm.dateTime),
         method: settlementForm.method,
         reference: settlementForm.reference.trim() || undefined,
       })
@@ -372,6 +521,7 @@ export default function GroupPage() {
       setSettlementForm({
         toUserId: '',
         amount: '',
+        dateTime: getDefaultTransactionTime(),
         method: 'cash',
         reference: '',
       })
@@ -428,6 +578,91 @@ export default function GroupPage() {
       setError(submitError.message)
     } finally {
       setSubmitting((current) => ({ ...current, member: false }))
+    }
+  }
+
+  async function handleAdvanceSubmit(event) {
+    event.preventDefault()
+    setNotice('')
+    setError('')
+    setSubmittingAdvance(true)
+    try {
+      const amount = Number(advanceForm.amount)
+      const recipientId = activeAdvanceRecipientId
+      if (!recipientId) throw new Error('Choose a member to pay.')
+      if (!amount || amount <= 0) throw new Error('Enter a valid amount.')
+      await api.recordAdvancePayment(token, groupId, {
+        amount,
+        date: toIsoFromLocalDateTime(advanceForm.dateTime),
+        note: advanceForm.note.trim(),
+        toUserId: recipientId,
+      })
+      setAdvanceForm((current) => ({
+        ...current,
+        amount: '',
+        note: '',
+        dateTime: getDefaultTransactionTime(),
+      }))
+      setNotice('Advance payment recorded successfully.')
+      await loadWorkspace({ silent: true })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubmittingAdvance(false)
+    }
+  }
+
+  function handleEditClick(expense) {
+    setEditingExpenseId(getEntityId(expense))
+    setEditExpenseForm({
+      title: expense.title || expense.description || '',
+      category: expense.category || 'Other',
+      description: expense.description || '',
+    })
+  }
+
+  async function handleEditSubmit(event) {
+    event.preventDefault()
+    setNotice('')
+    setError('')
+    try {
+      const payload = {
+        title: editExpenseForm.title.trim(),
+        category: editExpenseForm.category,
+        description: editExpenseForm.description.trim(),
+      }
+      await api.editExpense(token, groupId, editingExpenseId, payload)
+      setNotice('Expense updated successfully.')
+      setEditingExpenseId(null)
+      await loadWorkspace({ silent: true })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleRoleUpdate(memberId, newRole) {
+    setNotice('')
+    setError('')
+    try {
+      await api.updateMemberRole(token, groupId, memberId, newRole)
+      setNotice('Role updated successfully.')
+      await loadWorkspace({ silent: true })
+    } catch (submitError) {
+      setError(submitError.message)
+    }
+  }
+
+  async function handleDeleteExpense(expenseId) {
+    if (!window.confirm('Are you sure you want to delete this expense? All balances will be reversed.')) return
+    
+    setNotice('')
+    setError('')
+    try {
+      await api.deleteExpense(token, groupId, expenseId)
+      setNotice('Expense deleted successfully.')
+      await loadWorkspace({ silent: true })
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -494,8 +729,6 @@ export default function GroupPage() {
     )
   }
 
-  const RoleIcon = getRoleIcon(currentRole)
-
   return (
     <div className="space-y-6 pb-8">
       <section className={`hero-banner fin-card hero-balance ${notice ? 'flash-positive' : error ? 'flash-negative' : ''}`}>
@@ -511,7 +744,13 @@ export default function GroupPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-3xl font-display md:text-5xl">{group.name}</h1>
                 <span className="fin-pill fin-pill-neutral capitalize">
-                  <RoleIcon size={16} strokeWidth={1.5} />
+                  {currentRole === 'owner' ? (
+                    <Crown size={16} strokeWidth={1.5} />
+                  ) : currentRole === 'manager' ? (
+                    <ShieldCheck size={16} strokeWidth={1.5} />
+                  ) : (
+                    <UserCircle size={16} strokeWidth={1.5} />
+                  )}
                   {currentRole}
                 </span>
               </div>
@@ -665,7 +904,7 @@ export default function GroupPage() {
                   <p className="fin-copy text-sm">
                     {formatCurrency(item.amountRupees ?? item.amount)} by {(item.method || 'cash').toUpperCase()}
                   </p>
-                  <span className="text-xs text-[var(--text-secondary)]">{formatRelativeDate(item.createdAt)}</span>
+                  <span className="text-xs text-[var(--text-secondary)]">{formatDateTime(item.date || item.createdAt)}</span>
                 </article>
               ))}
             </div>
@@ -676,7 +915,7 @@ export default function GroupPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <SectionCard eyebrow="Expense flow" icon={Receipt} subtitle="Record the next expense with equal or exact splits. Exact mode updates the validation bar live." title="Add expense">
+        <SectionCard eyebrow="Expense flow" icon={Receipt} subtitle="Record an expense with equal or exact splits. Exact mode updates the validation bar live." title="Add expense">
           <form className="grid gap-4" onSubmit={handleExpenseSubmit}>
             <label className="block">
               <span className="fin-label">Title</span>
@@ -710,6 +949,84 @@ export default function GroupPage() {
                 step="1"
                 type="number"
                 value={expenseForm.amount}
+              />
+            </label>
+
+            <label className="block">
+              <span className="fin-label">Date &amp; time</span>
+              <input
+                className="fin-input"
+                onChange={(event) =>
+                  setExpenseForm((current) => ({
+                    ...current,
+                    dateTime: event.target.value,
+                  }))
+                }
+                required
+                type="datetime-local"
+                value={expenseForm.dateTime}
+              />
+            </label>
+
+            <label className="block">
+              <span className="fin-label">Paid by</span>
+              <select
+                className="fin-select"
+                onChange={(event) =>
+                  setExpenseForm((current) => ({
+                    ...current,
+                    paidBy: event.target.value,
+                  }))
+                }
+                value={expenseForm.paidBy}
+              >
+                {group.members?.map((member) => {
+                  const memberId = getEntityId(member.user)
+
+                  return (
+                    <option key={memberId} value={memberId}>
+                      {member.user?.name || 'Unknown member'}
+                    </option>
+                  )
+                })}
+              </select>
+              <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                Choose the member who actually paid. Advance credit is consumed only when the expense is recorded against the correct payer.
+              </p>
+            </label>
+
+            <label className="block">
+              <span className="fin-label">Category</span>
+              <select
+                className="fin-select"
+                onChange={(event) =>
+                  setExpenseForm((current) => ({
+                    ...current,
+                    category: event.target.value,
+                  }))
+                }
+                value={expenseForm.category}
+              >
+                {Object.entries(categoryMeta).map(([value, meta]) => (
+                  <option key={value} value={value}>
+                    {meta.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="fin-label">Receipt (Optional)</span>
+              <input
+                className="fin-input !p-2 file:mr-4 file:rounded-xl file:border-0 file:bg-[rgba(255,255,255,0.1)] file:px-4 file:py-1 file:text-sm file:font-semibold file:text-[var(--text-primary)] hover:file:bg-[rgba(255,255,255,0.2)]"
+                type="file"
+                accept="image/*"
+                onChange={(event) =>
+                  setExpenseForm((current) => ({
+                    ...current,
+                    receiptFile: event.target.files[0] || null,
+                  }))
+                }
               />
             </label>
 
@@ -827,6 +1144,22 @@ export default function GroupPage() {
               />
             </label>
 
+            <label className="block">
+              <span className="fin-label">Date &amp; time</span>
+              <input
+                className="fin-input"
+                onChange={(event) =>
+                  setSettlementForm((current) => ({
+                    ...current,
+                    dateTime: event.target.value,
+                  }))
+                }
+                required
+                type="datetime-local"
+                value={settlementForm.dateTime}
+              />
+            </label>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 className={settlementForm.method === 'cash' ? 'btn btn-primary sm:w-auto' : 'btn btn-ghost sm:w-auto'}
@@ -934,7 +1267,7 @@ export default function GroupPage() {
                             <strong className="font-cabinet text-sm text-[var(--text-primary)]">{expense.title || expense.description}</strong>
                             <span className="fin-pill fin-pill-neutral">{meta.label}</span>
                           </div>
-                          <p className="fin-copy text-sm">{formatDate(expense.date || expense.createdAt)} • Paid by {expense.paidBy?.name || 'Unknown'}</p>
+                          <p className="fin-copy text-sm">{formatDateTime(expense.date || expense.createdAt)} • Paid by {expense.paidBy?.name || 'Unknown'}</p>
                           <div className="flex flex-wrap gap-2 pt-1">
                             {expense.splits?.map((split) => (
                               <span className="fin-pill fin-pill-neutral" key={getEntityId(split.user)}>
@@ -951,10 +1284,10 @@ export default function GroupPage() {
                           <p className="text-xs text-[var(--text-secondary)] capitalize">{expense.splitType} split</p>
                         </div>
                         <div className="flex gap-2">
-                          <button aria-label="Edit expense" className="btn btn-ghost btn-icon" type="button">
+                          <button aria-label="Edit expense" className="btn btn-ghost btn-icon" type="button" onClick={() => handleEditClick(expense)}>
                             <Pencil size={16} strokeWidth={1.5} />
                           </button>
-                          <button aria-label="Delete expense" className="btn btn-ghost btn-icon" type="button">
+                          <button aria-label="Delete expense" className="btn btn-ghost btn-icon" type="button" onClick={() => handleDeleteExpense(getEntityId(expense))}>
                             <Trash2 size={16} strokeWidth={1.5} />
                           </button>
                         </div>
@@ -994,10 +1327,22 @@ export default function GroupPage() {
                       <strong className="block truncate font-cabinet text-sm text-[var(--text-primary)]">{member.user?.name || 'Unknown member'}</strong>
                       <p className="truncate text-xs text-[var(--text-secondary)]">{member.user?.email || 'Email not shared'}</p>
                     </div>
-                    <span className="fin-pill fin-pill-neutral capitalize">
-                      <MemberRoleIcon size={14} strokeWidth={1.5} />
-                      {member.role}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="fin-pill fin-pill-neutral capitalize">
+                        <MemberRoleIcon size={14} strokeWidth={1.5} />
+                        {member.role}
+                      </span>
+                      {currentRole === 'owner' && memberId !== user.id && (
+                        <select
+                          className="fin-select !py-1 !px-2 !h-auto text-xs !w-auto"
+                          value={member.role}
+                          onChange={(e) => handleRoleUpdate(memberId, e.target.value)}
+                        >
+                          <option value="member">Member</option>
+                          <option value="manager">Manager</option>
+                        </select>
+                      )}
+                    </div>
                   </div>
                 </article>
               )
@@ -1132,6 +1477,158 @@ export default function GroupPage() {
         </SectionCard>
       </div>
 
+      {/* ── ADVANCE PAYMENTS ── */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <SectionCard
+          eyebrow="Advance Payment"
+          icon={PiggyBank}
+          subtitle="Use an advance to clear what you owe now or create credit with another member for later."
+          title="Pay in Advance"
+        >
+          {advanceRecipientOptions.length ? (
+            <form className="grid gap-4" onSubmit={handleAdvanceSubmit}>
+              <label className="block">
+                <span className="fin-label">Paying to</span>
+                <select
+                  className="fin-select"
+                  onChange={(event) => {
+                    const selected = advanceRecipientOptions.find((option) => option.id === event.target.value)
+                    setAdvanceForm((current) => ({
+                      ...current,
+                      toUserId: event.target.value,
+                      amount:
+                        selected?.suggestedAmount && selected.suggestedAmount > 0
+                          ? String(selected.suggestedAmount)
+                          : current.amount,
+                    }))
+                  }}
+                  required
+                  value={activeAdvanceRecipientId}
+                >
+                  <option value="">Choose a member</option>
+                  {advanceRecipientOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name} • {option.suggestedAmount > 0 ? `you owe ${formatCurrency(option.suggestedAmount)}` : 'create future credit'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {selectedAdvanceRecipient ? (
+                <p className="rounded-[16px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.04)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+                  {selectedAdvanceRecipient.suggestedAmount > 0
+                    ? `This will reduce the ${formatCurrency(selectedAdvanceRecipient.suggestedAmount)} you currently owe ${selectedAdvanceRecipient.name}.`
+                    : `${selectedAdvanceRecipient.name} does not have an open due from you right now, so this payment will stay as credit for future expenses.`}
+                </p>
+              ) : null}
+
+              <label className="block">
+                <span className="fin-label">Amount (₹)</span>
+                <input
+                  className="fin-input"
+                  min="1"
+                  onChange={(event) =>
+                    setAdvanceForm((current) => ({
+                      ...current,
+                      amount: event.target.value,
+                    }))
+                  }
+                  placeholder="500"
+                  required
+                  step="0.01"
+                  type="number"
+                  value={advanceForm.amount}
+                />
+              </label>
+              <label className="block">
+                <span className="fin-label">Date &amp; time</span>
+                <input
+                  className="fin-input"
+                  onChange={(event) =>
+                    setAdvanceForm((current) => ({
+                      ...current,
+                      dateTime: event.target.value,
+                    }))
+                  }
+                  required
+                  type="datetime-local"
+                  value={advanceForm.dateTime}
+                />
+              </label>
+              <label className="block">
+                <span className="fin-label">Note (Optional)</span>
+                <input
+                  className="fin-input"
+                  onChange={(event) =>
+                    setAdvanceForm((current) => ({
+                      ...current,
+                      note: event.target.value,
+                    }))
+                  }
+                  placeholder="Pre-trip deposit, monthly share..."
+                  value={advanceForm.note}
+                />
+              </label>
+              <button className="btn btn-primary" disabled={submittingAdvance} type="submit">
+                <PiggyBank size={18} strokeWidth={1.5} />
+                {submittingAdvance ? 'Processing…' : 'Submit Advance Payment'}
+              </button>
+            </form>
+          ) : (
+            <div className="fin-copy text-sm p-4 rounded-xl border border-[var(--glass-border)] bg-[rgba(255,255,255,0.04)]">
+              Add at least one more member to this group before recording advance payments.
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          eyebrow="Advance History"
+          icon={Wallet}
+          subtitle="All recorded advance payments between members in this group."
+          title="Payment History"
+        >
+          {advancePayments.length ? (
+            <div className="grid gap-3">
+              {advancePayments.map((adv) => {
+                const fromId = getEntityId(adv.from)
+                const toId = getEntityId(adv.to)
+                const fromLabel = `${adv.from?.name || 'Member'}${fromId === user.id ? ' (you)' : ''}`
+                const toLabel = `${adv.to?.name || 'Member'}${toId === user.id ? ' (you)' : ''}`
+                return (
+                  <article
+                    key={adv._id}
+                    className="flex items-center justify-between gap-4 rounded-[18px] border border-[var(--glass-border)] bg-[rgba(255,255,255,0.03)] p-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="empty-state-icon h-10 w-10 rounded-xl" style={{ color: 'var(--success)', background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.12)' }}>
+                        <PiggyBank size={18} strokeWidth={1.5} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          {fromLabel}
+                        </p>
+                        <p className="text-xs text-[var(--text-secondary)]">Paid to {toLabel}</p>
+                        {adv.note && <p className="text-xs text-[var(--text-muted)]">{adv.note}</p>}
+                        <p className="text-xs text-[var(--text-secondary)]">{formatDateTime(adv.date || adv.createdAt)}</p>
+                      </div>
+                    </div>
+                    <span className="balance-positive text-lg font-bold">
+                      {formatCurrency(adv.amountRupees ?? adv.amount / 100)}
+                    </span>
+                  </article>
+                )
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              description="No advance payments have been made yet. Members can pre-pay anyone in the group they owe, or create credit for later."
+              icon={PiggyBank}
+              title="No advance payments"
+            />
+          )}
+        </SectionCard>
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <SectionCard eyebrow="Ledger" icon={ArrowRight} subtitle="Direct pairwise obligations from the current backend ledger." title="Who owes whom">
           {balances.length ? (
@@ -1169,7 +1666,7 @@ export default function GroupPage() {
                   <p className="fin-copy text-sm">
                     {formatCurrency(expense.amountRupees ?? expense.amount)} paid by {expense.paidBy?.name || 'Unknown'}.
                   </p>
-                  <span className="text-xs text-[var(--text-secondary)]">{formatRelativeDate(expense.date || expense.createdAt)}</span>
+                  <span className="text-xs text-[var(--text-secondary)]">{formatDateTime(expense.date || expense.createdAt)}</span>
                 </article>
               ))}
             </div>
@@ -1178,6 +1675,70 @@ export default function GroupPage() {
           )}
         </SectionCard>
       </div>
+
+      {/* ── EDIT EXPENSE MODAL ── */}
+      {editingExpenseId && (
+        <div className="dialog-backdrop" role="presentation">
+          <div aria-modal="true" className="dialog-panel fin-card fin-card-static" role="dialog">
+            <div className="fin-card-inner space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-display">Edit Expense</h2>
+                  <p className="fin-copy text-sm">Metadata changes only. To change amounts or splits, delete and re-record.</p>
+                </div>
+                <button aria-label="Close dialog" className="btn btn-ghost btn-icon" onClick={() => setEditingExpenseId(null)} type="button">
+                  <X size={18} strokeWidth={1.5} />
+                </button>
+              </div>
+
+              <form className="grid gap-4" onSubmit={handleEditSubmit}>
+                <label className="block">
+                  <span className="fin-label">Title</span>
+                  <input
+                    className="fin-input"
+                    onChange={(event) => setEditExpenseForm(curr => ({ ...curr, title: event.target.value }))}
+                    placeholder="Groceries, cab fare..."
+                    required
+                    value={editExpenseForm.title}
+                  />
+                </label>
+                
+                <label className="block">
+                  <span className="fin-label">Category</span>
+                  <select
+                    className="fin-select"
+                    onChange={(event) => setEditExpenseForm(curr => ({ ...curr, category: event.target.value }))}
+                    value={editExpenseForm.category}
+                  >
+                    {Object.entries(categoryMeta).map(([value, meta]) => (
+                      <option key={value} value={value}>{meta.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="fin-label">Description (Optional)</span>
+                  <textarea
+                    className="fin-textarea"
+                    onChange={(event) => setEditExpenseForm(curr => ({ ...curr, description: event.target.value }))}
+                    rows={2}
+                    value={editExpenseForm.description}
+                  />
+                </label>
+
+                <div className="dialog-actions mt-4">
+                  <button className="btn btn-ghost" onClick={() => setEditingExpenseId(null)} type="button">
+                    Cancel
+                  </button>
+                  <button className="btn btn-primary" type="submit">
+                    Save changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

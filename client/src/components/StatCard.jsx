@@ -51,7 +51,7 @@ export function StatCard({
         </div>
 
         <strong style={{
-          fontFamily: "'Playfair Display', serif",
+          fontFamily: "'Inter', sans-serif",
           fontSize: '1.85rem', fontWeight: 800,
           color: toneColors[tone], lineHeight: 1,
           display: 'block',

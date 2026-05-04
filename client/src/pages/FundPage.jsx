@@ -14,7 +14,7 @@ import { StatCard } from '../components/StatCard'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../services/api'
 import { rememberFund } from '../services/fundRegistry'
-import { formatDateTime } from '../utils/format'
+import { formatDateTime, toDateTimeLocalValue, toIsoFromLocalDateTime } from '../utils/format'
 import { getEntityId } from '../utils/helpers'
 
 async function fetchFundSnapshot(token, fundId) {
@@ -39,10 +39,12 @@ export default function FundPage() {
   const [contributeForm, setContributeForm] = useState({
     amount: '',
     description: '',
+    dateTime: toDateTimeLocalValue(new Date()),
   })
   const [withdrawForm, setWithdrawForm] = useState({
     amount: '',
     description: '',
+    dateTime: toDateTimeLocalValue(new Date()),
   })
 
   function applyFund(nextFund) {
@@ -121,11 +123,13 @@ export default function FundPage() {
       await api.contributeToFund(token, fundId, {
         amount: Number(contributeForm.amount),
         description: contributeForm.description.trim(),
+        date: toIsoFromLocalDateTime(contributeForm.dateTime),
       })
 
       setContributeForm({
         amount: '',
         description: '',
+        dateTime: toDateTimeLocalValue(new Date()),
       })
       setNotice('Contribution saved successfully.')
       await loadFund()
@@ -146,11 +150,13 @@ export default function FundPage() {
       await api.withdrawFromFund(token, fundId, {
         amount: Number(withdrawForm.amount),
         description: withdrawForm.description.trim(),
+        date: toIsoFromLocalDateTime(withdrawForm.dateTime),
       })
 
       setWithdrawForm({
         amount: '',
         description: '',
+        dateTime: toDateTimeLocalValue(new Date()),
       })
       setNotice('Withdrawal saved successfully.')
       await loadFund()
@@ -262,6 +268,22 @@ export default function FundPage() {
             </label>
 
             <label className="block">
+              <span className="fin-label">Date &amp; time</span>
+              <input
+                className="fin-input"
+                onChange={(event) =>
+                  setContributeForm((current) => ({
+                    ...current,
+                    dateTime: event.target.value,
+                  }))
+                }
+                required
+                type="datetime-local"
+                value={contributeForm.dateTime}
+              />
+            </label>
+
+            <label className="block">
               <span className="fin-label">Description</span>
               <textarea
                 className="fin-textarea"
@@ -303,6 +325,22 @@ export default function FundPage() {
                 step="1"
                 type="number"
                 value={withdrawForm.amount}
+              />
+            </label>
+
+            <label className="block">
+              <span className="fin-label">Date &amp; time</span>
+              <input
+                className="fin-input"
+                onChange={(event) =>
+                  setWithdrawForm((current) => ({
+                    ...current,
+                    dateTime: event.target.value,
+                  }))
+                }
+                required
+                type="datetime-local"
+                value={withdrawForm.dateTime}
               />
             </label>
 
@@ -367,7 +405,7 @@ export default function FundPage() {
                   <p className="fin-copy text-sm mt-1">
                     {txn.description || (isContribution ? 'No description provided' : 'No reason provided')}
                   </p>
-                  <span className="text-xs text-[var(--text-secondary)] mt-2 block">{formatDateTime(txn.createdAt)}</span>
+                  <span className="text-xs text-[var(--text-secondary)] mt-2 block">{formatDateTime(txn.date || txn.createdAt)}</span>
                 </article>
               )
             })}
