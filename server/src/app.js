@@ -21,7 +21,7 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: "*", // ⚠️ change in production
+    origin: process.env.CLIENT_URL, 
     credentials: true,
   })
 );
