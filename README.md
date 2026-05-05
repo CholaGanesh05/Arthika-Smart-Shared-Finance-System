@@ -1,5 +1,4 @@
 <div align="center">
-  <img src="client/public/vite.svg" alt="Arthika Logo" width="120" />
   
   # 🏦 Arthika
   **Smart Shared Finance System**
